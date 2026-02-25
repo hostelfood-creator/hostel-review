@@ -3,31 +3,28 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { faCamera, faTriangleExclamation, faRotate, faVideoSlash } from '@fortawesome/free-solid-svg-icons'
+import { faCamera, faTriangleExclamation, faRotate, faVideoSlash, faCameraRotate } from '@fortawesome/free-solid-svg-icons'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import jsQR from 'jsqr'
 
 type PermissionState = 'prompt' | 'granted' | 'denied' | 'checking' | 'unsupported'
 type ScannerState = 'idle' | 'requesting' | 'scanning' | 'error'
+type FacingMode = 'environment' | 'user'
 
 interface QRScannerProps {
-  /** Called when a QR code is successfully decoded */
   onScan: (data: string) => void
-  /** Optional CSS classes for the outer wrapper */
   className?: string
 }
 
 /**
- * QR Scanner component with full camera permission lifecycle management.
+ * QR Scanner with robust camera lifecycle, back-camera default, and flip toggle.
  *
- * Handles:
- * - Checking permission state before requesting
- * - Prompting users to grant camera access
- * - Detecting when permission is denied/reset and showing recovery instructions
- * - Scanning QR codes via the native BarcodeDetector API (Chrome, Edge, Android)
- * - Graceful fallback message for unsupported browsers (Firefox, older Safari)
- * - Cleaning up camera streams on unmount
+ * Key fixes over previous version:
+ * - Stream is attached to <video> directly inside startCamera (no useEffect race)
+ * - Uses exact `facingMode` constraint with fallback for devices that don't support it
+ * - Adds a round camera-flip button for switching front/back
+ * - Waits for video `loadedmetadata` + `play()` before starting QR detection
  */
 export default function QRScanner({ onScan, className = '' }: QRScannerProps) {
   const videoRef = useRef<HTMLVideoElement>(null)
@@ -36,64 +33,16 @@ export default function QRScanner({ onScan, className = '' }: QRScannerProps) {
   const animFrameRef = useRef<number>(0)
   const hasScannedRef = useRef(false)
   const mountedRef = useRef(true)
-  // Ref to always hold the latest onScan callback, avoiding stale closures
   const onScanRef = useRef(onScan)
   onScanRef.current = onScan
 
   const [permission, setPermission] = useState<PermissionState>('checking')
   const [scannerState, setScannerState] = useState<ScannerState>('idle')
   const [errorMessage, setErrorMessage] = useState('')
+  const [facing, setFacing] = useState<FacingMode>('environment')
+  const [flipping, setFlipping] = useState(false)
 
-  // ── Permission Detection ───────────────────────────────────
-  const checkPermission = useCallback(async () => {
-    setPermission('checking')
-
-    // Check if getUserMedia is available (HTTPS required)
-    if (!navigator.mediaDevices?.getUserMedia) {
-      setPermission('unsupported')
-      setErrorMessage(
-        window.location.protocol === 'http:'
-          ? 'Camera requires HTTPS. Please access this site via a secure connection.'
-          : 'Camera is not supported on this device or browser.'
-      )
-      return
-    }
-
-    // Use Permissions API to check state *without* triggering a prompt
-    try {
-      const result = await navigator.permissions.query({ name: 'camera' as PermissionName })
-      const initialState = result.state as PermissionState
-      setPermission(initialState)
-
-      // If permission is already granted, start the camera immediately
-      if (initialState === 'granted') {
-        startCamera()
-      }
-
-      // Listen for permission changes (e.g., user resets in browser settings)
-      result.addEventListener('change', () => {
-        const newState = result.state as PermissionState
-        setPermission(newState)
-
-        // If permission was revoked while scanner is active, stop camera
-        if (newState === 'denied') {
-          stopCamera()
-          setScannerState('error')
-          setErrorMessage('Camera permission was revoked. Please re-enable it in your browser settings.')
-        }
-
-        // If permission was re-granted, auto-restart
-        if (newState === 'granted' && scannerState !== 'scanning') {
-          startCamera()
-        }
-      })
-    } catch {
-      // Permissions API not supported — assume prompt
-      setPermission('prompt')
-    }
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // ── Camera Start / Stop ────────────────────────────────────
+  // ── Stop camera helper ─────────────────────────────────────
   const stopCamera = useCallback(() => {
     if (animFrameRef.current) {
       cancelAnimationFrame(animFrameRef.current)
@@ -108,32 +57,137 @@ export default function QRScanner({ onScan, className = '' }: QRScannerProps) {
     }
   }, [])
 
-  const startCamera = useCallback(async () => {
+  // ── QR detection loop ──────────────────────────────────────
+  const startQRDetection = useCallback((video: HTMLVideoElement, canvas: HTMLCanvasElement) => {
+    const ctx = canvas.getContext('2d', { willReadFrequently: true })
+    if (!ctx) return
+
+    let detector: BarcodeDetector | null = null
+    if ('BarcodeDetector' in window) {
+      try {
+        detector = new BarcodeDetector({ formats: ['qr_code'] })
+      } catch {
+        detector = null
+      }
+    }
+
+    const scan = async () => {
+      if (hasScannedRef.current || !mountedRef.current) return
+
+      if (video.readyState >= video.HAVE_CURRENT_DATA && video.videoWidth > 0 && video.videoHeight > 0) {
+        canvas.width = video.videoWidth
+        canvas.height = video.videoHeight
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
+
+        try {
+          if (detector) {
+            const barcodes = await detector.detect(canvas)
+            if (barcodes.length > 0 && barcodes[0].rawValue) {
+              hasScannedRef.current = true
+              onScanRef.current(barcodes[0].rawValue)
+              return
+            }
+          } else {
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+            const code = jsQR(imageData.data, imageData.width, imageData.height, {
+              inversionAttempts: 'dontInvert',
+            })
+            if (code?.data) {
+              hasScannedRef.current = true
+              onScanRef.current(code.data)
+              return
+            }
+          }
+        } catch (err) {
+          console.warn('QR detection error:', err)
+        }
+      }
+
+      animFrameRef.current = requestAnimationFrame(scan)
+    }
+
+    animFrameRef.current = requestAnimationFrame(scan)
+  }, [])
+
+  // ── Start camera — attaches stream directly to video element ──
+  const startCamera = useCallback(async (mode: FacingMode = 'environment') => {
+    // Stop any existing stream first
+    stopCamera()
+
     setScannerState('requesting')
     setErrorMessage('')
     hasScannedRef.current = false
 
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: { ideal: 'environment' }, // Prefer rear camera
-          width: { ideal: 640 },
-          height: { ideal: 480 },
-        },
-        audio: false,
-      })
+      // Try exact facingMode first, then fall back to ideal
+      let stream: MediaStream
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: { exact: mode },
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+          },
+          audio: false,
+        })
+      } catch {
+        // Exact constraint failed (e.g. desktop with one camera) — try ideal
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: { ideal: mode },
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+          },
+          audio: false,
+        })
+      }
 
-      streamRef.current = stream
-
-      // Guard: if component unmounted while getUserMedia was pending, stop immediately
+      // Guard: unmounted while awaiting
       if (!mountedRef.current) {
         stream.getTracks().forEach((t) => t.stop())
         return
       }
 
+      streamRef.current = stream
       setPermission('granted')
       setScannerState('scanning')
+
+      // ── Directly attach stream to the video element ──
+      // We wait a microtask to ensure React has rendered the <video> element
+      // after setScannerState('scanning') above.
+      await new Promise((r) => setTimeout(r, 0))
+
+      const video = videoRef.current
+      if (!video || !mountedRef.current) {
+        stream.getTracks().forEach((t) => t.stop())
+        return
+      }
+
+      // Ensure playsinline works on iOS
+      video.setAttribute('playsinline', 'true')
+      video.setAttribute('autoplay', 'true')
+      video.setAttribute('muted', 'true')
+      video.srcObject = stream
+
+      // Wait for metadata so videoWidth/Height are available
+      await new Promise<void>((resolve) => {
+        if (video.readyState >= video.HAVE_METADATA) {
+          resolve()
+        } else {
+          video.addEventListener('loadedmetadata', () => resolve(), { once: true })
+        }
+      })
+
+      // Play the video — critical on mobile
+      await video.play()
+
+      // Start scanning frames
+      const canvas = canvasRef.current
+      if (canvas && mountedRef.current) {
+        startQRDetection(video, canvas)
+      }
     } catch (err: unknown) {
+      if (!mountedRef.current) return
       const error = err as DOMException
       if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
         setPermission('denied')
@@ -146,109 +200,65 @@ export default function QRScanner({ onScan, className = '' }: QRScannerProps) {
       } else if (error.name === 'NotReadableError' || error.name === 'TrackStartError') {
         setScannerState('error')
         setErrorMessage('Camera is in use by another app. Please close it and try again.')
+      } else if (error.name === 'OverconstrainedError') {
+        setScannerState('error')
+        setErrorMessage('Requested camera is not available. Try flipping the camera.')
       } else {
         setScannerState('error')
         setErrorMessage('Failed to access camera. Please try again.')
       }
     }
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [stopCamera, startQRDetection])
 
-  // ── QR Code Detection Loop ─────────────────────────────────
-  const startQRDetection = useCallback(() => {
-    const video = videoRef.current
-    const canvas = canvasRef.current
-    if (!video || !canvas) return
+  // ── Flip camera ────────────────────────────────────────────
+  const flipCamera = useCallback(async () => {
+    if (flipping) return
+    setFlipping(true)
+    const newMode: FacingMode = facing === 'environment' ? 'user' : 'environment'
+    setFacing(newMode)
+    await startCamera(newMode)
+    // Small delay so the flip animation completes
+    setTimeout(() => setFlipping(false), 300)
+  }, [facing, flipping, startCamera])
 
-    const ctx = canvas.getContext('2d', { willReadFrequently: true })
-    if (!ctx) return
+  // ── Permission check ───────────────────────────────────────
+  const checkPermission = useCallback(async () => {
+    setPermission('checking')
 
-    // Try native BarcodeDetector first (Chrome 83+, Edge, Samsung, Android WebView)
-    let detector: BarcodeDetector | null = null
-    if ('BarcodeDetector' in window) {
-      try {
-        detector = new BarcodeDetector({ formats: ['qr_code'] })
-      } catch {
-        detector = null
-      }
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setPermission('unsupported')
+      setErrorMessage(
+        window.location.protocol === 'http:'
+          ? 'Camera requires HTTPS. Please access this site via a secure connection.'
+          : 'Camera is not supported on this device or browser.'
+      )
+      return
     }
 
-    const scan = async () => {
-      // Stop the loop if already scanned or component unmounted
-      if (hasScannedRef.current || !mountedRef.current) {
-        return
+    try {
+      const result = await navigator.permissions.query({ name: 'camera' as PermissionName })
+      const initialState = result.state as PermissionState
+      setPermission(initialState)
+
+      if (initialState === 'granted') {
+        startCamera('environment')
       }
 
-      // Wait for video to be ready (must have valid dimensions)
-      if (video.readyState === video.HAVE_ENOUGH_DATA && video.videoWidth > 0 && video.videoHeight > 0) {
-        canvas.width = video.videoWidth
-        canvas.height = video.videoHeight
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
+      result.addEventListener('change', () => {
+        if (!mountedRef.current) return
+        const newState = result.state as PermissionState
+        setPermission(newState)
 
-        try {
-          if (detector) {
-            // Native BarcodeDetector — fast, hardware-accelerated
-            const barcodes = await detector.detect(canvas)
-            if (barcodes.length > 0 && barcodes[0].rawValue) {
-              hasScannedRef.current = true
-              onScanRef.current(barcodes[0].rawValue)
-              return
-            }
-          } else {
-            // Fallback: jsQR for iOS Safari/Firefox
-            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
-            const code = jsQR(imageData.data, imageData.width, imageData.height, {
-              inversionAttempts: "dontInvert",
-            })
-            if (code && code.data) {
-              hasScannedRef.current = true
-              onScanRef.current(code.data)
-              return
-            }
-          }
-        } catch (err) {
-          // Detection failed this frame — continue scanning
-          console.warn("QR detection error:", err)
+        if (newState === 'denied') {
+          stopCamera()
+          setScannerState('error')
+          setErrorMessage('Camera permission was revoked. Please re-enable it in your browser settings.')
         }
-      }
-
-      animFrameRef.current = requestAnimationFrame(scan)
+      })
+    } catch {
+      setPermission('prompt')
     }
-
-    animFrameRef.current = requestAnimationFrame(scan)
-  }, [])
-
-  // ── Automatic Stream Attachment ────────────────────────────
-  useEffect(() => {
-    if (scannerState === 'scanning' && permission === 'granted' && videoRef.current && streamRef.current) {
-      const video = videoRef.current
-      if (video.srcObject !== streamRef.current) {
-        video.srcObject = streamRef.current
-        video.play().catch(console.error)
-
-        let started = false
-        const onPlaying = () => {
-          if (!started) {
-            started = true
-            startQRDetection()
-          }
-        }
-
-        video.addEventListener('playing', onPlaying)
-
-        // Fallback in case 'playing' already fired
-        setTimeout(() => {
-          if (!started && video.readyState === video.HAVE_ENOUGH_DATA) {
-            started = true
-            startQRDetection()
-          }
-        }, 500)
-
-        return () => {
-          video.removeEventListener('playing', onPlaying)
-        }
-      }
-    }
-  }, [scannerState, permission, startQRDetection])
+  }, [startCamera, stopCamera])
 
   // ── Lifecycle ──────────────────────────────────────────────
   useEffect(() => {
@@ -267,7 +277,7 @@ export default function QRScanner({ onScan, className = '' }: QRScannerProps) {
       <canvas ref={canvasRef} className="hidden" />
 
       <AnimatePresence mode="wait">
-        {/* State: Checking permission */}
+        {/* Checking */}
         {permission === 'checking' && (
           <motion.div
             key="checking"
@@ -281,8 +291,8 @@ export default function QRScanner({ onScan, className = '' }: QRScannerProps) {
           </motion.div>
         )}
 
-        {/* State: Permission prompt — ask user to grant camera */}
-        {(permission === 'prompt' && scannerState !== 'scanning' && scannerState !== 'requesting') && (
+        {/* Prompt */}
+        {permission === 'prompt' && scannerState !== 'scanning' && scannerState !== 'requesting' && (
           <motion.div
             key="prompt"
             initial={{ opacity: 0, y: 20 }}
@@ -298,18 +308,13 @@ export default function QRScanner({ onScan, className = '' }: QRScannerProps) {
               <FontAwesomeIcon icon={faCamera} className="w-8 h-8 text-primary" />
             </motion.div>
 
-            <h3 className="text-lg font-bold text-foreground mb-2">
-              Camera Permission Required
-            </h3>
+            <h3 className="text-lg font-bold text-foreground mb-2">Camera Permission Required</h3>
             <p className="text-sm text-muted-foreground mb-6 max-w-[280px]">
               To scan the QR code for meal check-in, we need access to your camera.
               Your camera is only used for scanning — no images are stored.
             </p>
 
-            <Button
-              onClick={startCamera}
-              className="gap-2"
-            >
+            <Button onClick={() => startCamera('environment')} className="gap-2">
               <FontAwesomeIcon icon={faCamera} className="w-4 h-4" />
               Allow Camera Access
             </Button>
@@ -320,7 +325,7 @@ export default function QRScanner({ onScan, className = '' }: QRScannerProps) {
           </motion.div>
         )}
 
-        {/* State: Requesting camera access (waiting for browser prompt) */}
+        {/* Requesting */}
         {scannerState === 'requesting' && (
           <motion.div
             key="requesting"
@@ -330,14 +335,11 @@ export default function QRScanner({ onScan, className = '' }: QRScannerProps) {
             className="flex flex-col items-center py-16 text-center"
           >
             <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin mb-4" />
-            <p className="text-sm text-muted-foreground">Waiting for camera permission...</p>
-            <p className="text-xs text-muted-foreground mt-2">
-              Check for the browser popup asking to allow camera access.
-            </p>
+            <p className="text-sm text-muted-foreground">Starting camera...</p>
           </motion.div>
         )}
 
-        {/* State: Camera denied */}
+        {/* Denied */}
         {permission === 'denied' && (
           <motion.div
             key="denied"
@@ -350,14 +352,11 @@ export default function QRScanner({ onScan, className = '' }: QRScannerProps) {
               <FontAwesomeIcon icon={faVideoSlash} className="w-8 h-8 text-red-500" />
             </div>
 
-            <h3 className="text-lg font-bold text-foreground mb-2">
-              Camera Access Blocked
-            </h3>
+            <h3 className="text-lg font-bold text-foreground mb-2">Camera Access Blocked</h3>
             <p className="text-sm text-muted-foreground mb-5 max-w-[300px]">
               {errorMessage || 'Camera permission was denied. Please enable it to scan QR codes.'}
             </p>
 
-            {/* Platform-specific instructions */}
             <Card className="w-full max-w-[320px] mb-5">
               <CardContent className="p-4">
                 <p className="text-xs font-semibold text-foreground mb-3 uppercase tracking-wider">
@@ -366,15 +365,15 @@ export default function QRScanner({ onScan, className = '' }: QRScannerProps) {
                 <div className="space-y-2.5 text-left">
                   <div className="flex gap-2">
                     <span className="text-xs text-muted-foreground shrink-0 font-bold w-14">Chrome</span>
-                    <span className="text-xs text-muted-foreground">Tap the lock icon (🔒) in the address bar → Site settings → Camera → Allow</span>
+                    <span className="text-xs text-muted-foreground">Tap the lock icon in the address bar &rarr; Site settings &rarr; Camera &rarr; Allow</span>
                   </div>
                   <div className="flex gap-2">
                     <span className="text-xs text-muted-foreground shrink-0 font-bold w-14">Safari</span>
-                    <span className="text-xs text-muted-foreground">Settings → Safari → Camera → Allow</span>
+                    <span className="text-xs text-muted-foreground">Settings &rarr; Safari &rarr; Camera &rarr; Allow</span>
                   </div>
                   <div className="flex gap-2">
                     <span className="text-xs text-muted-foreground shrink-0 font-bold w-14">Android</span>
-                    <span className="text-xs text-muted-foreground">Settings → Apps → Browser → Permissions → Camera → Allow</span>
+                    <span className="text-xs text-muted-foreground">Settings &rarr; Apps &rarr; Browser &rarr; Permissions &rarr; Camera &rarr; Allow</span>
                   </div>
                 </div>
               </CardContent>
@@ -387,7 +386,7 @@ export default function QRScanner({ onScan, className = '' }: QRScannerProps) {
           </motion.div>
         )}
 
-        {/* State: Camera unsupported */}
+        {/* Unsupported */}
         {permission === 'unsupported' && (
           <motion.div
             key="unsupported"
@@ -411,7 +410,7 @@ export default function QRScanner({ onScan, className = '' }: QRScannerProps) {
           </motion.div>
         )}
 
-        {/* State: Scanning — live camera feed */}
+        {/* Scanning — live camera feed */}
         {scannerState === 'scanning' && permission === 'granted' && (
           <motion.div
             key="scanning"
@@ -429,21 +428,15 @@ export default function QRScanner({ onScan, className = '' }: QRScannerProps) {
                 className="w-full h-full object-cover"
               />
 
-              {/* Scan overlay with animated corners */}
+              {/* Scan overlay */}
               <div className="absolute inset-0 pointer-events-none">
-                {/* Semi-transparent overlay outside scan area */}
                 <div className="absolute inset-0 bg-black/30" />
-
-                {/* Clear scan area in center */}
                 <div className="absolute inset-[15%]">
                   <div className="relative w-full h-full">
-                    {/* Animated corners */}
                     <div className="absolute top-0 left-0 w-8 h-8 border-t-3 border-l-3 border-primary rounded-tl-lg" />
                     <div className="absolute top-0 right-0 w-8 h-8 border-t-3 border-r-3 border-primary rounded-tr-lg" />
                     <div className="absolute bottom-0 left-0 w-8 h-8 border-b-3 border-l-3 border-primary rounded-bl-lg" />
                     <div className="absolute bottom-0 right-0 w-8 h-8 border-b-3 border-r-3 border-primary rounded-br-lg" />
-
-                    {/* Scanning line animation */}
                     <motion.div
                       className="absolute left-0 right-0 h-0.5 bg-gradient-to-r from-transparent via-primary to-transparent"
                       animate={{ y: ['0%', '800%', '0%'] }}
@@ -452,6 +445,23 @@ export default function QRScanner({ onScan, className = '' }: QRScannerProps) {
                   </div>
                 </div>
               </div>
+
+              {/* ── Camera flip button (bottom-right of viewfinder) ── */}
+              <motion.button
+                type="button"
+                onClick={flipCamera}
+                disabled={flipping}
+                className="absolute bottom-3 right-3 z-10 w-11 h-11 rounded-full bg-black/60 backdrop-blur-sm border border-white/20 flex items-center justify-center text-white shadow-lg active:scale-90 transition-transform disabled:opacity-50"
+                whileTap={{ scale: 0.85 }}
+                aria-label="Switch camera"
+              >
+                <motion.div
+                  animate={flipping ? { rotate: 180 } : { rotate: 0 }}
+                  transition={{ duration: 0.3, ease: 'easeInOut' }}
+                >
+                  <FontAwesomeIcon icon={faCameraRotate} className="w-5 h-5" />
+                </motion.div>
+              </motion.button>
             </div>
 
             <p className="text-center text-sm text-muted-foreground mt-4">
@@ -462,7 +472,7 @@ export default function QRScanner({ onScan, className = '' }: QRScannerProps) {
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={stopCamera}
+                onClick={() => { stopCamera(); setScannerState('idle'); setPermission('granted') }}
                 className="text-xs text-muted-foreground"
               >
                 Stop Camera
@@ -471,7 +481,7 @@ export default function QRScanner({ onScan, className = '' }: QRScannerProps) {
           </motion.div>
         )}
 
-        {/* State: General error */}
+        {/* Error */}
         {scannerState === 'error' && permission !== 'denied' && permission !== 'unsupported' && (
           <motion.div
             key="error"
@@ -489,7 +499,7 @@ export default function QRScanner({ onScan, className = '' }: QRScannerProps) {
               {errorMessage || 'An error occurred with the camera.'}
             </p>
 
-            <Button onClick={startCamera} className="gap-2">
+            <Button onClick={() => startCamera(facing)} className="gap-2">
               <FontAwesomeIcon icon={faRotate} className="w-4 h-4" />
               Retry
             </Button>
@@ -500,9 +510,6 @@ export default function QRScanner({ onScan, className = '' }: QRScannerProps) {
   )
 }
 
-/**
- * Type declaration for BarcodeDetector (not yet in TypeScript's lib.dom).
- */
 declare global {
   interface BarcodeDetector {
     detect(image: ImageBitmapSource): Promise<Array<{ rawValue: string }>>

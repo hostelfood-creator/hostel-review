@@ -42,24 +42,43 @@ export default function StudentComplaintsPage() {
     const [category, setCategory] = useState('other')
     const [submitting, setSubmitting] = useState(false)
     const [loading, setLoading] = useState(true)
+    const [loadingMore, setLoadingMore] = useState(false)
+    const [page, setPage] = useState(1)
+    const [hasMore, setHasMore] = useState(true)
+    const PAGE_SIZE = 15
 
-    const loadComplaints = useCallback(async () => {
+    const loadComplaints = useCallback(async (pageNum = 1, append = false) => {
         try {
-            const res = await fetch('/api/complaints')
+            if (append) setLoadingMore(true)
+            const res = await fetch(`/api/complaints?page=${pageNum}&pageSize=${PAGE_SIZE}`)
             const data = await res.json()
-            if (data.complaints) setComplaints(data.complaints)
+            const newComplaints = data.complaints || []
+            if (append) {
+                setComplaints(prev => [...prev, ...newComplaints])
+            } else {
+                setComplaints(newComplaints)
+            }
+            if (data.pagination) {
+                setHasMore(pageNum < data.pagination.totalPages)
+            } else {
+                setHasMore(newComplaints.length === PAGE_SIZE)
+            }
         } catch (err) {
             console.error('Failed to load complaints:', err)
         } finally {
             setLoading(false)
+            setLoadingMore(false)
         }
     }, [])
 
     useEffect(() => {
-        loadComplaints()
+        loadComplaints(1)
         const supabase = createClient()
         const channel = supabase.channel('student_complaints_realtime')
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'complaints' }, () => loadComplaints())
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'complaints' }, () => {
+                setPage(1)
+                loadComplaints(1)
+            })
             .subscribe()
         return () => { supabase.removeChannel(channel) }
     }, [loadComplaints])
@@ -81,7 +100,8 @@ export default function StudentComplaintsPage() {
             toast.success('Complaint submitted successfully')
             setComplaintText('')
             setCategory('other')
-            loadComplaints()
+            setPage(1)
+            loadComplaints(1)
         } catch { toast.error('Network error') } finally { setSubmitting(false) }
     }
 
@@ -207,6 +227,19 @@ export default function StudentComplaintsPage() {
                             </Card>
                         )
                     })}
+
+                    {/* Load More */}
+                    {hasMore && (
+                        <div className="text-center pt-2 pb-4">
+                            <Button variant="outline" size="sm" onClick={() => {
+                                const nextPage = page + 1
+                                setPage(nextPage)
+                                loadComplaints(nextPage, true)
+                            }} disabled={loadingMore} className="rounded-full">
+                                {loadingMore ? 'Loading...' : 'Load More Complaints'}
+                            </Button>
+                        </div>
+                    )}
                 </div>
             )}
         </div>

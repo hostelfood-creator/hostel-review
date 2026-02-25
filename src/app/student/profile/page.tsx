@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { faIdCard, faEnvelope, faBuilding, faGraduationCap, faCalendar, faStar, faPenToSquare, faCheck, faXmark } from '@fortawesome/free-solid-svg-icons'
+import { faIdCard, faEnvelope, faBuilding, faGraduationCap, faCalendar, faStar, faPenToSquare, faCheck, faXmark, faKey, faEye, faEyeSlash } from '@fortawesome/free-solid-svg-icons'
 import { createClient } from '@/lib/supabase/client'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -38,6 +38,15 @@ export default function ProfilePage() {
   const [editYear, setEditYear] = useState('')
   const [saving, setSaving] = useState(false)
 
+  // Password change state
+  const [changingPassword, setChangingPassword] = useState(false)
+  const [currentPassword, setCurrentPassword] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [savingPassword, setSavingPassword] = useState(false)
+  const [showCurrentPw, setShowCurrentPw] = useState(false)
+  const [showNewPw, setShowNewPw] = useState(false)
+
   const loadData = useCallback(async () => {
     try {
       const [userRes, reviewRes] = await Promise.all([
@@ -65,14 +74,20 @@ export default function ProfilePage() {
     loadData()
 
     const supabase = createClient()
-    const channel = supabase.channel('student_profile_realtime')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'reviews' }, () => {
-        loadData()
-      })
-      .subscribe()
+    // Get user ID for filtered realtime subscription (avoid O(U*R) traffic)
+    supabase.auth.getUser().then(({ data: { user: authUser } }) => {
+      if (!authUser) return
+      const ch = supabase.channel('student_profile_realtime')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'reviews', filter: `user_id=eq.${authUser.id}` }, () => {
+          loadData()
+        })
+        .subscribe()
+      channelRef = ch
+    })
+    let channelRef: ReturnType<typeof supabase.channel> | null = null
 
     return () => {
-      supabase.removeChannel(channel)
+      if (channelRef) supabase.removeChannel(channelRef)
     }
   }, [loadData])
 
@@ -83,6 +98,40 @@ export default function ProfilePage() {
       router.push('/login')
     } catch {
       setLoggingOut(false)
+    }
+  }
+
+  const handleChangePassword = async () => {
+    if (!currentPassword) { toast.error('Enter your current password'); return }
+    if (!newPassword || newPassword.length < 6) { toast.error('New password must be at least 6 characters'); return }
+    if (newPassword !== confirmPassword) { toast.error('Passwords do not match'); return }
+    if (currentPassword === newPassword) { toast.error('New password must be different'); return }
+
+    setSavingPassword(true)
+    try {
+      const res = await fetch('/api/auth/change-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ currentPassword, newPassword }),
+      })
+      const data = await res.json()
+
+      if (!res.ok) {
+        toast.error(data.error || 'Failed to change password')
+        return
+      }
+
+      toast.success('Password changed successfully')
+      setChangingPassword(false)
+      setCurrentPassword('')
+      setNewPassword('')
+      setConfirmPassword('')
+      setShowCurrentPw(false)
+      setShowNewPw(false)
+    } catch {
+      toast.error('Network error, please try again')
+    } finally {
+      setSavingPassword(false)
     }
   }
 
@@ -273,6 +322,115 @@ export default function ProfilePage() {
               {idx < infoItems.length - 1 && <Separator />}
             </div>
           ))}
+        </CardContent>
+      </Card>
+
+      {/* Change Password */}
+      <Card className="rounded-xl mt-6">
+        <CardContent className="p-4">
+          {changingPassword ? (
+            <div className="space-y-3">
+              <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                <FontAwesomeIcon icon={faKey} className="w-3.5 h-3.5 text-primary" />
+                Change Password
+              </h3>
+              <div>
+                <label className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider mb-1 block">
+                  Current Password
+                </label>
+                <div className="relative">
+                  <input
+                    type={showCurrentPw ? 'text' : 'password'}
+                    value={currentPassword}
+                    onChange={(e) => setCurrentPassword(e.target.value)}
+                    className="w-full px-3 py-2 pr-10 rounded-lg border bg-background text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
+                    placeholder="Enter current password"
+                    disabled={savingPassword}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowCurrentPw(!showCurrentPw)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  >
+                    <FontAwesomeIcon icon={showCurrentPw ? faEyeSlash : faEye} className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+              <div>
+                <label className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider mb-1 block">
+                  New Password
+                </label>
+                <div className="relative">
+                  <input
+                    type={showNewPw ? 'text' : 'password'}
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    className="w-full px-3 py-2 pr-10 rounded-lg border bg-background text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
+                    placeholder="Min 6 characters"
+                    disabled={savingPassword}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowNewPw(!showNewPw)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  >
+                    <FontAwesomeIcon icon={showNewPw ? faEyeSlash : faEye} className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+              <div>
+                <label className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider mb-1 block">
+                  Confirm New Password
+                </label>
+                <input
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg border bg-background text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
+                  placeholder="Re-enter new password"
+                  disabled={savingPassword}
+                />
+              </div>
+              <div className="flex gap-2">
+                <Button onClick={handleChangePassword} disabled={savingPassword} className="flex-1 rounded-lg" size="sm">
+                  <FontAwesomeIcon icon={faCheck} className="w-3.5 h-3.5 mr-1.5" />
+                  {savingPassword ? 'Saving...' : 'Update Password'}
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setChangingPassword(false)
+                    setCurrentPassword('')
+                    setNewPassword('')
+                    setConfirmPassword('')
+                    setShowCurrentPw(false)
+                    setShowNewPw(false)
+                  }}
+                  disabled={savingPassword}
+                  className="rounded-lg"
+                  size="sm"
+                >
+                  <FontAwesomeIcon icon={faXmark} className="w-3.5 h-3.5" />
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <button
+              onClick={() => setChangingPassword(true)}
+              className="w-full flex items-center gap-3 text-left"
+            >
+              <div className="text-muted-foreground">
+                <FontAwesomeIcon icon={faKey} className="w-[18px] h-[18px]" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">
+                  Security
+                </p>
+                <p className="text-sm text-foreground">Change Password</p>
+              </div>
+              <FontAwesomeIcon icon={faPenToSquare} className="w-3.5 h-3.5 text-muted-foreground" />
+            </button>
+          )}
         </CardContent>
       </Card>
 

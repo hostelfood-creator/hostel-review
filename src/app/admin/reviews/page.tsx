@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { faInbox, faStar, faDownload, faImage, faFilePdf } from '@fortawesome/free-solid-svg-icons'
+import { faInbox, faStar, faDownload, faImage, faFilePdf, faReply, faPaperPlane, faXmark } from '@fortawesome/free-solid-svg-icons'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { createClient } from '@/lib/supabase/client'
+import { toast } from 'sonner'
 
 interface Review {
   id: string
@@ -25,6 +26,8 @@ interface Review {
   year: string | null
   anonymous: boolean
   createdAt: string
+  adminReply: string | null
+  adminRepliedAt: string | null
 }
 
 const MEAL_LABELS: Record<string, string> = {
@@ -51,6 +54,11 @@ export default function AdminReviewsPage() {
   const [mealFilter, setMealFilter] = useState('')
   const [blockFilter, setBlockFilter] = useState('all')
   const [metadata, setMetadata] = useState<{ userRole?: string, userBlock?: string, hostelBlocks?: string[] }>({})
+
+  // Reply state
+  const [replyingTo, setReplyingTo] = useState<string | null>(null)
+  const [replyText, setReplyText] = useState('')
+  const [sendingReply, setSendingReply] = useState(false)
 
   const loadReviews = useCallback(async () => {
     setLoading(true)
@@ -104,6 +112,25 @@ export default function AdminReviewsPage() {
     if (rating >= 4) return 'text-green-500 dark:text-green-400'
     if (rating >= 3) return 'text-yellow-500 dark:text-yellow-400'
     return 'text-red-500 dark:text-red-400'
+  }
+
+  const handleSendReply = async (reviewId: string) => {
+    const text = replyText.trim()
+    if (!text) { toast.error('Reply cannot be empty'); return }
+    setSendingReply(true)
+    try {
+      const res = await fetch('/api/admin/review-reply', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reviewId, reply: text }),
+      })
+      const data = await res.json()
+      if (!res.ok) { toast.error(data.error || 'Failed to send reply'); return }
+      toast.success('Reply sent')
+      setReplyingTo(null)
+      setReplyText('')
+      loadReviews()
+    } catch { toast.error('Network error') } finally { setSendingReply(false) }
   }
 
   return (
@@ -299,6 +326,54 @@ export default function AdminReviewsPage() {
                       <Badge variant={getSentimentVariant(review.sentiment)} className="text-[10px] uppercase tracking-wider">
                         {review.sentiment}
                       </Badge>
+                    )}
+
+                    {/* Admin Reply Display */}
+                    {review.adminReply && (
+                      <div className="mt-3 p-3 rounded-lg bg-primary/5 border border-primary/10">
+                        <div className="flex items-center gap-1.5 mb-1">
+                          <FontAwesomeIcon icon={faReply} className="w-3 h-3 text-primary" />
+                          <span className="text-[10px] font-semibold text-primary uppercase tracking-wider">Admin Reply</span>
+                        </div>
+                        <p className="text-sm text-foreground leading-relaxed">{review.adminReply}</p>
+                        {review.adminRepliedAt && (
+                          <p className="text-[10px] text-muted-foreground mt-1">
+                            {new Date(review.adminRepliedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                          </p>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Reply Input */}
+                    {replyingTo === review.id ? (
+                      <div className="mt-3 flex gap-2">
+                        <input
+                          type="text"
+                          value={replyText}
+                          onChange={(e) => setReplyText(e.target.value)}
+                          placeholder="Type your reply..."
+                          className="flex-1 px-3 py-2 rounded-lg border bg-background text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
+                          maxLength={2000}
+                          disabled={sendingReply}
+                          onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendReply(review.id) } }}
+                        />
+                        <Button size="sm" onClick={() => handleSendReply(review.id)} disabled={sendingReply || !replyText.trim()} className="rounded-lg">
+                          <FontAwesomeIcon icon={faPaperPlane} className="w-3 h-3" />
+                        </Button>
+                        <Button variant="outline" size="sm" onClick={() => { setReplyingTo(null); setReplyText('') }} disabled={sendingReply} className="rounded-lg">
+                          <FontAwesomeIcon icon={faXmark} className="w-3 h-3" />
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="mt-2">
+                        <button
+                          onClick={() => { setReplyingTo(review.id); setReplyText(review.adminReply || '') }}
+                          className="text-[11px] text-primary hover:text-primary/80 font-medium flex items-center gap-1 transition-colors"
+                        >
+                          <FontAwesomeIcon icon={faReply} className="w-3 h-3" />
+                          {review.adminReply ? 'Edit Reply' : 'Reply'}
+                        </button>
+                      </div>
                     )}
 
                   </div>

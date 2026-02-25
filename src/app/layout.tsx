@@ -5,6 +5,7 @@ import { ThemeProvider } from '@/lib/theme'
 import { PreloaderWrapper } from '@/components/preloader-wrapper'
 import { ToasterProvider } from '@/components/toaster-provider'
 import MaintenanceOverlay from '@/components/maintenance-overlay'
+import { ServiceWorkerRegister } from '@/components/sw-register'
 
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'),
@@ -77,6 +78,7 @@ export default async function RootLayout({
         <ThemeProvider>
           <PreloaderWrapper />
           <MaintenanceOverlay />
+          <ServiceWorkerRegister />
           {children}
           <ToasterProvider />
         </ThemeProvider>

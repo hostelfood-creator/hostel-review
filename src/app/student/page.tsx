@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { faStar, faCircleCheck, faArrowRight, faLock, faLockOpen, faUserCircle, faQrcode } from '@fortawesome/free-solid-svg-icons'
+import { faStar, faCircleCheck, faArrowRight, faLock, faLockOpen, faUserCircle, faQrcode, faCalendarCheck } from '@fortawesome/free-solid-svg-icons'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -90,26 +90,28 @@ const DEFAULT_ITEMS: Record<string, string> = {
   dinner: 'Menu not yet updated for today',
 }
 
-/** Parse timing like "7:30 - 9:30 AM" and return the start hour in 24h format */
+/** Parse timing like "7:30 - 9:30 AM" or "7:30 - 9:30 PM" and return the start hour in 24h format */
 function getMealStartHour(timing: string): number {
   if (!timing) return 0
 
-  // Extract only the START portion (before any dash/hyphen) to avoid
-  // the end-time's AM/PM suffix from affecting the start hour detection.
+  // Extract the start hour from the full timing string
   const startPart = timing.split(/[-–—]/, 1)[0].trim()
-
-  // Match the start hour and its immediate AM/PM suffix (if any)
   const match = startPart.match(/(\d{1,2})[:.]?\d{0,2}\s*(am|pm)?/i)
   if (!match) return 0
 
   let hour = parseInt(match[1], 10)
 
-  // Only use AM/PM that directly follows the start time
-  const isPM = match[2]?.toUpperCase() === 'PM'
-  const isAM = match[2]?.toUpperCase() === 'AM'
+  // If the start part has its own AM/PM, use that.
+  // Otherwise, inherit the AM/PM from the END of the full timing string
+  // (e.g. "7:30 - 9:30 PM" → start is also PM).
+  let period = match[2]?.toUpperCase() || null
+  if (!period) {
+    const fullMatch = timing.match(/(am|pm)\s*$/i)
+    period = fullMatch ? fullMatch[1].toUpperCase() : null
+  }
 
-  if (isPM && hour < 12) hour += 12
-  if (isAM && hour === 12) hour = 0
+  if (period === 'PM' && hour < 12) hour += 12
+  if (period === 'AM' && hour === 12) hour = 0
   return hour
 }
 
@@ -127,6 +129,8 @@ export default function StudentDashboard() {
   const [serverHour, setServerHour] = useState(new Date().getHours())
   const [userName, setUserName] = useState('')
   const [checkinStatus, setCheckinStatus] = useState<{ checkedIn: boolean; mealType?: string; mealLabel?: string } | null>(null)
+  const [weeklyHistory, setWeeklyHistory] = useState<{ date: string; meals: string[] }[] | null>(null)
+  const [weeklyPercentage, setWeeklyPercentage] = useState(0)
 
   useEffect(() => {
     fetch('/api/auth/me')
@@ -150,6 +154,15 @@ export default function StudentDashboard() {
         }
       })
       .catch(() => setCheckinStatus({ checkedIn: false }))
+
+    // Fetch weekly check-in history
+    fetch('/api/checkin/history?days=7')
+      .then(r => r.json())
+      .then(d => {
+        if (d.history) setWeeklyHistory(d.history)
+        if (d.summary) setWeeklyPercentage(d.summary.percentage)
+      })
+      .catch(() => {})
   }, [])
 
   const initReviewState = useCallback(() => {
@@ -387,6 +400,55 @@ export default function StudentDashboard() {
           </Card>
         </Link>
       </BlurFade>
+
+      {/* Weekly Check-in History */}
+      {weeklyHistory && weeklyHistory.length > 0 && (
+        <BlurFade delay={0.38} inView>
+          <Card className="mb-6 rounded-xl">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <FontAwesomeIcon icon={faCalendarCheck} className="w-4 h-4 text-primary" />
+                  <span className="text-sm font-semibold text-foreground">This Week</span>
+                </div>
+                <Badge variant="secondary" className="text-[10px]">
+                  {weeklyPercentage}% attended
+                </Badge>
+              </div>
+              <div className="flex gap-1.5">
+                {weeklyHistory.slice().reverse().map((day) => {
+                  const d = new Date(day.date + 'T00:00:00')
+                  const dayLabel = d.toLocaleDateString('en-US', { weekday: 'narrow' })
+                  const mealCount = day.meals.length
+                  return (
+                    <div key={day.date} className="flex-1 text-center">
+                      <p className="text-[10px] text-muted-foreground mb-1">{dayLabel}</p>
+                      <div className="flex flex-col gap-0.5">
+                        {['breakfast', 'lunch', 'snacks', 'dinner'].map((meal) => (
+                          <div
+                            key={meal}
+                            className={`h-2 rounded-full transition-colors ${
+                              day.meals.includes(meal)
+                                ? 'bg-green-500 dark:bg-green-400'
+                                : 'bg-muted'
+                            }`}
+                            title={`${meal}: ${day.meals.includes(meal) ? 'attended' : 'missed'}`}
+                          />
+                        ))}
+                      </div>
+                      <p className="text-[10px] text-muted-foreground mt-1 font-medium">{mealCount}/4</p>
+                    </div>
+                  )
+                })}
+              </div>
+              <div className="flex items-center gap-3 mt-3 text-[10px] text-muted-foreground">
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-green-500 inline-block" /> Attended</span>
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-muted inline-block" /> Missed</span>
+              </div>
+            </CardContent>
+          </Card>
+        </BlurFade>
+      )}
 
       {/* Title */}
       <BlurFade delay={0.4} inView>

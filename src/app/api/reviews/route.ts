@@ -4,6 +4,27 @@ import { getReviews, createReview, getStudentHostelBlocks } from '@/lib/db'
 import { getTodayDate, analyzeSentiment } from '@/lib/utils'
 import { checkRateLimit, getClientIp, rateLimitResponse } from '@/lib/rate-limit'
 
+/** Get IST date/hour using Intl API */
+function getISTDateTime() {
+  const now = new Date()
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Kolkata',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  })
+  const parts = Object.fromEntries(
+    formatter.formatToParts(now).map((p) => [p.type, p.value])
+  )
+  return {
+    date: `${parts.year}-${parts.month}-${parts.day}`,
+    hours: parseInt(parts.hour!, 10),
+  }
+}
+
 export async function GET(request: Request) {
   try {
     // Rate limit: 30 reads per minute per IP
@@ -19,6 +40,13 @@ export async function GET(request: Request) {
     }
 
     const { data: profile } = await supabase.from('profiles').select('role, hostel_block').eq('id', user.id).single()
+
+    // If profile cannot be retrieved, default to most restrictive access (student)
+    if (!profile) {
+      const filters = { userId: user.id, limit: 50, offset: 0 }
+      const { data: reviews, total } = await getReviews(filters)
+      return NextResponse.json({ reviews, userRole: 'student', userBlock: null, hostelBlocks: [], pagination: { page: 1, pageSize: 50, total, totalPages: Math.ceil(total / 50) } })
+    }
 
     const { searchParams } = new URL(request.url)
     const date = searchParams.get('date') || undefined
@@ -137,6 +165,155 @@ export async function POST(request: Request) {
     }
   } catch (error) {
     console.error('Reviews POST error:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  }
+}
+
+/** PATCH — Edit a review (only within same day while meal window is still open) */
+export async function PATCH(request: Request) {
+  try {
+    const ip = getClientIp(request)
+    const rl = checkRateLimit(`reviews-patch:${ip}`, 10, 15 * 60 * 1000)
+    if (!rl.allowed) return rateLimitResponse(rl.resetAt)
+
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+
+    if (!user) {
+      return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
+    }
+
+    const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
+    if (profile?.role !== 'student') {
+      return NextResponse.json({ error: 'Only students can edit reviews' }, { status: 403 })
+    }
+
+    const { reviewId, rating, reviewText } = await request.json()
+
+    if (!reviewId) {
+      return NextResponse.json({ error: 'Review ID is required' }, { status: 400 })
+    }
+
+    // Fetch the review
+    const { data: review, error: fetchErr } = await supabase
+      .from('reviews')
+      .select('*')
+      .eq('id', reviewId)
+      .single()
+
+    if (fetchErr || !review) {
+      return NextResponse.json({ error: 'Review not found' }, { status: 404 })
+    }
+
+    if (review.user_id !== user.id) {
+      return NextResponse.json({ error: 'You can only edit your own reviews' }, { status: 403 })
+    }
+
+    // Check: review must be from today and it must still be today (IST)
+    const { date: todayIST } = getISTDateTime()
+    if (review.date !== todayIST) {
+      return NextResponse.json({ error: 'You can only edit reviews from today' }, { status: 403 })
+    }
+
+    const updates: Record<string, unknown> = {}
+    if (rating !== undefined) {
+      if (typeof rating !== 'number' || !Number.isInteger(rating) || rating < 1 || rating > 5) {
+        return NextResponse.json({ error: 'Rating must be an integer between 1 and 5' }, { status: 400 })
+      }
+      updates.rating = rating
+    }
+    if (reviewText !== undefined) {
+      if (typeof reviewText !== 'string' || reviewText.length > 2000) {
+        return NextResponse.json({ error: 'Review text must be under 2000 characters' }, { status: 400 })
+      }
+      updates.review_text = reviewText || null
+      updates.sentiment = reviewText ? analyzeSentiment(reviewText) : 'neutral'
+    }
+
+    if (Object.keys(updates).length === 0) {
+      return NextResponse.json({ error: 'No fields to update' }, { status: 400 })
+    }
+
+    const { error: updateErr } = await supabase
+      .from('reviews')
+      .update(updates)
+      .eq('id', reviewId)
+
+    if (updateErr) {
+      console.error('Review update error:', updateErr)
+      return NextResponse.json({ error: 'Failed to update review' }, { status: 500 })
+    }
+
+    return NextResponse.json({ success: true })
+  } catch (error) {
+    console.error('Reviews PATCH error:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  }
+}
+
+/** DELETE — Delete a review (only within 24 hours of creation) */
+export async function DELETE(request: Request) {
+  try {
+    const ip = getClientIp(request)
+    const rl = checkRateLimit(`reviews-delete:${ip}`, 10, 15 * 60 * 1000)
+    if (!rl.allowed) return rateLimitResponse(rl.resetAt)
+
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+
+    if (!user) {
+      return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
+    }
+
+    const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
+    if (profile?.role !== 'student') {
+      return NextResponse.json({ error: 'Only students can delete reviews' }, { status: 403 })
+    }
+
+    const { searchParams } = new URL(request.url)
+    const reviewId = searchParams.get('id')
+
+    if (!reviewId) {
+      return NextResponse.json({ error: 'Review ID is required' }, { status: 400 })
+    }
+
+    // Fetch the review
+    const { data: review, error: fetchErr } = await supabase
+      .from('reviews')
+      .select('*')
+      .eq('id', reviewId)
+      .single()
+
+    if (fetchErr || !review) {
+      return NextResponse.json({ error: 'Review not found' }, { status: 404 })
+    }
+
+    if (review.user_id !== user.id) {
+      return NextResponse.json({ error: 'You can only delete your own reviews' }, { status: 403 })
+    }
+
+    // Check: review must be within 24 hours
+    const createdAt = new Date(review.created_at).getTime()
+    const now = Date.now()
+    const hoursElapsed = (now - createdAt) / (1000 * 60 * 60)
+
+    if (hoursElapsed > 24) {
+      return NextResponse.json({ error: 'Reviews can only be deleted within 24 hours of submission' }, { status: 403 })
+    }
+
+    const { error: deleteErr } = await supabase
+      .from('reviews')
+      .delete()
+      .eq('id', reviewId)
+
+    if (deleteErr) {
+      console.error('Review delete error:', deleteErr)
+      return NextResponse.json({ error: 'Failed to delete review' }, { status: 500 })
+    }
+
+    return NextResponse.json({ success: true })
+  } catch (error) {
+    console.error('Reviews DELETE error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

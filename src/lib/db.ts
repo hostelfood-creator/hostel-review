@@ -126,6 +126,10 @@ export async function getReviews(filters: {
       hostelBlock: profile?.hostel_block || null,
       department: profile?.department || null,
       year: profile?.year || null,
+      createdAt: r.created_at || null,
+      adminReply: r.admin_reply || null,
+      adminReplyBy: r.admin_reply_by || null,
+      adminRepliedAt: r.admin_replied_at || null,
       _creationTime: new Date(r.created_at).getTime()
     }
   })

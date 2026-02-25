@@ -25,12 +25,19 @@
     "@radix-ui/react-tooltip": "^1.2.8",
     "@supabase/ssr": "^0.8.0",
     "@supabase/supabase-js": "^2.97.0",
+<<<<<<< HEAD
+=======
+
+>>>>>>> 0200fb90bb8a9c38a8b428bf606ec91468124b07
     "@upstash/ratelimit": "^2.0.8",
     "@upstash/redis": "^1.36.2",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.0",
     "framer-motion": "^12.34.3",
+<<<<<<< HEAD
     "jsqr": "^1.4.0",
+=======
+>>>>>>> 0200fb90bb8a9c38a8b428bf606ec91468124b07
     "lucide-react": "^0.575.0",
     "motion": "^12.34.3",
     "next": "^16.1.6",

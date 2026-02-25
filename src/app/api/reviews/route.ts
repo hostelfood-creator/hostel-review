@@ -1,0 +1,142 @@
+import { NextResponse } from 'next/server'
+import { createClient } from '@/lib/supabase/server'
+import { getReviews, createReview, getStudentHostelBlocks } from '@/lib/db'
+import { getTodayDate, analyzeSentiment } from '@/lib/utils'
+import { checkRateLimit, getClientIp, rateLimitResponse } from '@/lib/rate-limit'
+
+export async function GET(request: Request) {
+  try {
+    // Rate limit: 30 reads per minute per IP
+    const ip = getClientIp(request)
+    const rl = checkRateLimit(`reviews-get:${ip}`, 30, 60 * 1000)
+    if (!rl.allowed) return rateLimitResponse(rl.resetAt)
+
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+
+    if (!user) {
+      return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
+    }
+
+    const { data: profile } = await supabase.from('profiles').select('role, hostel_block').eq('id', user.id).single()
+
+    const { searchParams } = new URL(request.url)
+    const date = searchParams.get('date') || undefined
+    const mealType = searchParams.get('mealType') || undefined
+
+    // For admins, enforce their assigned block. Super admins can provide it via query, or see all.
+    let hostelBlock = searchParams.get('hostelBlock') || undefined
+    if (profile?.role === 'admin' && profile.hostel_block) {
+      hostelBlock = profile.hostel_block
+    }
+
+    // Pagination
+    const page = Math.max(1, parseInt(searchParams.get('page') || '1'))
+    const pageSize = Math.min(100, Math.max(1, parseInt(searchParams.get('pageSize') || '50')))
+
+    const filters: { userId?: string; date?: string; mealType?: string; limit?: number; offset?: number; hostelBlock?: string } = {}
+    if (date) filters.date = date
+    if (mealType) filters.mealType = mealType
+    if (hostelBlock) filters.hostelBlock = hostelBlock
+    if (profile?.role === 'student') filters.userId = user.id
+    filters.limit = pageSize
+    filters.offset = (page - 1) * pageSize
+
+    const { data: reviews, total } = await getReviews(filters)
+    const hostelBlocks = profile?.role === 'super_admin' ? await getStudentHostelBlocks() : []
+
+    return NextResponse.json({
+      reviews,
+      userRole: profile?.role,
+      userBlock: profile?.hostel_block,
+      hostelBlocks,
+      pagination: {
+        page,
+        pageSize,
+        total,
+        totalPages: Math.ceil(total / pageSize),
+      }
+    })
+  } catch (error) {
+    console.error('Reviews GET error:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  }
+}
+
+export async function POST(request: Request) {
+  try {
+    // Rate limit: 10 review submissions per 15 minutes per IP
+    const ip = getClientIp(request)
+    const rl = checkRateLimit(`reviews-post:${ip}`, 10, 15 * 60 * 1000)
+    if (!rl.allowed) return rateLimitResponse(rl.resetAt)
+
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+
+    if (!user) {
+      return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
+    }
+
+    const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
+    if (profile?.role !== 'student') {
+      return NextResponse.json({ error: 'Only students can submit reviews' }, { status: 403 })
+    }
+
+    const { mealType, rating, reviewText, anonymous } = await request.json()
+
+    const VALID_MEAL_TYPES = ['breakfast', 'lunch', 'snacks', 'dinner']
+
+    if (!mealType || !rating) {
+      return NextResponse.json(
+        { error: 'Meal type and rating are required' },
+        { status: 400 }
+      )
+    }
+    if (!VALID_MEAL_TYPES.includes(mealType)) {
+      return NextResponse.json(
+        { error: `Invalid meal type. Must be one of: ${VALID_MEAL_TYPES.join(', ')}` },
+        { status: 400 }
+      )
+    }
+    if (typeof rating !== 'number' || !Number.isInteger(rating) || rating < 1 || rating > 5) {
+      return NextResponse.json(
+        { error: 'Rating must be an integer between 1 and 5' },
+        { status: 400 }
+      )
+    }
+    if (reviewText && (typeof reviewText !== 'string' || reviewText.length > 2000)) {
+      return NextResponse.json(
+        { error: 'Review text must be under 2000 characters' },
+        { status: 400 }
+      )
+    }
+    const today = getTodayDate()
+    const sentiment = reviewText ? analyzeSentiment(reviewText) : 'neutral'
+
+    try {
+      const reviewId = await createReview({
+        userId: user.id,
+        date: today,
+        mealType,
+        rating,
+        reviewText: reviewText || undefined,
+        sentiment,
+        anonymous: anonymous || false,
+      })
+
+      return NextResponse.json({ review: { id: reviewId } })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : ''
+      if (message.includes('unique constraint') || message.includes('already')) {
+        return NextResponse.json(
+          { error: 'You have already reviewed this meal today' },
+          { status: 409 }
+        )
+      }
+      throw error
+    }
+  } catch (error) {
+    console.error('Reviews POST error:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  }
+}

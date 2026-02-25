@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { faInbox, faStar, faDownload, faImage } from '@fortawesome/free-solid-svg-icons'
+import { faInbox, faStar, faDownload, faImage, faFilePdf } from '@fortawesome/free-solid-svg-icons'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -32,6 +32,16 @@ const MEAL_LABELS: Record<string, string> = {
   lunch: 'Lunch',
   snacks: 'Snacks',
   dinner: 'Dinner',
+}
+
+/** Escape HTML entities to prevent XSS in PDF export */
+function escHtml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
 }
 
 export default function AdminReviewsPage() {
@@ -114,6 +124,46 @@ export default function AdminReviewsPage() {
           <Badge variant="secondary" className="self-start">
             {reviews.length} reviews
           </Badge>
+          <Button size="sm" onClick={() => {
+            if (reviews.length === 0) return
+            const dateLabel = dateFilter || new Date().toISOString().split('T')[0]
+            const mealLabel = mealFilter && mealFilter !== 'all' ? MEAL_LABELS[mealFilter] : 'All Meals'
+            const blockLabel = blockFilter && blockFilter !== 'all' ? blockFilter : 'All Blocks'
+            const printW = window.open('', '_blank')
+            if (!printW) return
+            const rows = reviews.map((r, i) =>
+              `<tr style="background:${i % 2 === 0 ? '#fff' : '#fafafa'}">
+                <td style="padding:8px 12px;border:1px solid #ddd;font-size:12px">${i + 1}</td>
+                <td style="padding:8px 12px;border:1px solid #ddd;font-size:12px;font-weight:600">${escHtml(r.userName)}</td>
+                <td style="padding:8px 12px;border:1px solid #ddd;font-size:12px;font-family:monospace">${escHtml(r.userRegisterId || '—')}</td>
+                <td style="padding:8px 12px;border:1px solid #ddd;font-size:12px">${escHtml(r.hostelBlock || '—')}</td>
+                <td style="padding:8px 12px;border:1px solid #ddd;font-size:12px">${MEAL_LABELS[r.mealType] || escHtml(r.mealType)}</td>
+                <td style="padding:8px 12px;border:1px solid #ddd;font-size:12px;font-weight:600;color:${r.rating >= 4 ? '#16a34a' : r.rating >= 3 ? '#eab308' : '#dc2626'}">${'★'.repeat(r.rating)}${'☆'.repeat(5 - r.rating)}</td>
+                <td style="padding:8px 12px;border:1px solid #ddd;font-size:12px;max-width:300px">${escHtml(r.reviewText || '—')}</td>
+                <td style="padding:8px 12px;border:1px solid #ddd;font-size:12px"><span style="padding:2px 8px;border-radius:12px;background:${r.sentiment === 'positive' ? '#dcfce7' : r.sentiment === 'negative' ? '#fde2e2' : '#fef9c3'};font-size:11px">${escHtml(r.sentiment || '—')}</span></td>
+              </tr>`
+            ).join('')
+            const avgRating = (reviews.reduce((a, r) => a + r.rating, 0) / reviews.length).toFixed(1)
+            printW.document.write(`<!DOCTYPE html><html><head><title>Reviews Report</title>
+              <style>@media print{@page{size:landscape;margin:12mm}}body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;margin:0;padding:24px;color:#111}h1{font-size:22px;margin-bottom:4px}.sub{color:#666;font-size:13px;margin-bottom:16px}table{width:100%;border-collapse:collapse}th{text-align:left;padding:8px 12px;border:1px solid #ddd;background:#f5f5f5;font-size:11px;text-transform:uppercase;letter-spacing:.5px}.footer{margin-top:24px;color:#999;font-size:11px;text-align:center;border-top:1px solid #eee;padding-top:12px}.stat{display:inline-block;padding:8px 16px;background:#f0f0f0;border-radius:8px;margin-right:12px;margin-bottom:8px}</style>
+            </head><body>
+              <h1>Student Food Reviews Report</h1>
+              <p class="sub">${dateLabel} · ${mealLabel} · ${blockLabel} · ${reviews.length} reviews</p>
+              <div style="margin-bottom:20px">
+                <span class="stat"><strong>Average Rating:</strong> ${avgRating} / 5</span>
+                <span class="stat"><strong>Positive:</strong> ${reviews.filter(r => r.sentiment === 'positive').length}</span>
+                <span class="stat"><strong>Negative:</strong> ${reviews.filter(r => r.sentiment === 'negative').length}</span>
+              </div>
+              <table><thead><tr><th>#</th><th>Student</th><th>Register No.</th><th>Hostel</th><th>Meal</th><th>Rating</th><th>Review</th><th>Sentiment</th></tr></thead>
+              <tbody>${rows}</tbody></table>
+              <div class="footer">Generated on ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })} · Hostel Food Review System</div>
+              <script>window.onload=function(){setTimeout(function(){window.print()},400)};<\/script>
+            </body></html>`)
+            printW.document.close()
+          }} className="rounded-full bg-red-600 hover:bg-red-700 text-white">
+            <FontAwesomeIcon icon={faFilePdf} className="w-3.5 h-3.5 mr-1.5" />
+            Export PDF
+          </Button>
           <Button variant="outline" size="sm" onClick={() => {
             if (reviews.length === 0) { return }
             const headers = ['Student', 'Register ID', 'Hostel Block', 'Date', 'Meal', 'Rating', 'Review', 'Sentiment']

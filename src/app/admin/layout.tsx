@@ -5,7 +5,7 @@ import { useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
 import { ThemeToggle } from '@/lib/theme'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { faUtensils, faChartLine, faMessage, faBars, faRightFromBracket, faCommentDots, faQrcode } from '@fortawesome/free-solid-svg-icons'
+import { faUtensils, faChartLine, faMessage, faBars, faRightFromBracket, faCommentDots, faQrcode, faClipboardList, faFileLines } from '@fortawesome/free-solid-svg-icons'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
@@ -58,6 +58,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     { href: '/admin/menu', icon: <FontAwesomeIcon icon={faUtensils} className="w-5 h-5" />, label: 'Menu' },
     { href: '/admin/complaints', icon: <FontAwesomeIcon icon={faCommentDots} className="w-5 h-5" />, label: 'Complaints' },
     { href: '/admin/attendance', icon: <FontAwesomeIcon icon={faQrcode} className="w-5 h-5" />, label: 'Attendance' },
+    { href: '/admin/attendance/list', icon: <FontAwesomeIcon icon={faClipboardList} className="w-5 h-5" />, label: 'Attendance List' },
+    { href: '/admin/reports', icon: <FontAwesomeIcon icon={faFileLines} className="w-5 h-5" />, label: 'Reports' },
   ]
 
   // Add Super Admin specific features

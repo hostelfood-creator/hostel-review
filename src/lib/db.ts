@@ -348,3 +348,140 @@ export async function getMealAttendanceCounts(date: string, hostelBlock?: string
     byBlock,
   }
 }
+
+// ── Detailed Attendance List (who ate / who missed) ───────
+
+export interface AttendanceRecord {
+  userId: string
+  name: string
+  registerId: string | null
+  hostelBlock: string | null
+  department: string | null
+  year: string | null
+  meals: Record<string, { checkedIn: boolean; checkedInAt: string | null }>
+}
+
+/**
+ * Get detailed attendance list for a given date.
+ * Returns each student with their check-in status for every meal.
+ */
+export async function getAttendanceList(
+  date: string,
+  hostelBlock?: string,
+  mealType?: string
+): Promise<{ records: AttendanceRecord[]; summary: { total: number; ate: Record<string, number>; missed: Record<string, number> } }> {
+  const serviceDb = createServiceClient()
+
+  // 1. Get all students (optionally filtered by block)
+  let studentQuery = serviceDb
+    .from('profiles')
+    .select('id, name, register_id, hostel_block, department, year')
+    .eq('role', 'student')
+    .order('name', { ascending: true })
+
+  if (hostelBlock) {
+    studentQuery = studentQuery.eq('hostel_block', hostelBlock)
+  }
+
+  const { data: students, error: studentsErr } = await studentQuery
+  if (studentsErr || !students) return { records: [], summary: { total: 0, ate: {}, missed: {} } }
+
+  // 2. Get all check-ins for this date
+  let checkinQuery = serviceDb
+    .from('meal_checkins')
+    .select('user_id, meal_type, checked_in_at')
+    .eq('date', date)
+
+  if (hostelBlock) {
+    checkinQuery = checkinQuery.eq('hostel_block', hostelBlock)
+  }
+  if (mealType) {
+    checkinQuery = checkinQuery.eq('meal_type', mealType)
+  }
+
+  const { data: checkins, error: checkinsErr } = await checkinQuery
+  if (checkinsErr) return { records: [], summary: { total: 0, ate: {}, missed: {} } }
+
+  // 3. Build a map: userId -> { mealType -> checkedInAt }
+  const checkinMap = new Map<string, Map<string, string>>()
+  for (const c of (checkins || [])) {
+    if (!checkinMap.has(c.user_id)) checkinMap.set(c.user_id, new Map())
+    checkinMap.get(c.user_id)!.set(c.meal_type, c.checked_in_at)
+  }
+
+  const meals = mealType ? [mealType] : ['breakfast', 'lunch', 'snacks', 'dinner']
+  const ate: Record<string, number> = {}
+  const missed: Record<string, number> = {}
+  meals.forEach(m => { ate[m] = 0; missed[m] = 0 })
+
+  // 4. Build records
+  const records: AttendanceRecord[] = students.map((s: any) => {
+    const userCheckins = checkinMap.get(s.id)
+    const mealStatus: Record<string, { checkedIn: boolean; checkedInAt: string | null }> = {}
+
+    meals.forEach(m => {
+      const checkedInAt = userCheckins?.get(m) || null
+      mealStatus[m] = { checkedIn: !!checkedInAt, checkedInAt }
+      if (checkedInAt) ate[m]++; else missed[m]++
+    })
+
+    return {
+      userId: s.id,
+      name: s.name,
+      registerId: s.register_id,
+      hostelBlock: s.hostel_block,
+      department: s.department,
+      year: s.year,
+      meals: mealStatus,
+    }
+  })
+
+  return {
+    records,
+    summary: {
+      total: students.length,
+      ate,
+      missed,
+    },
+  }
+}
+
+/**
+ * Get attendance history for multiple dates (day-by-day tracking).
+ */
+export async function getAttendanceHistory(
+  startDate: string,
+  endDate: string,
+  hostelBlock?: string
+): Promise<{ date: string; counts: Record<string, number>; total: number }[]> {
+  const serviceDb = createServiceClient()
+
+  let query = serviceDb
+    .from('meal_checkins')
+    .select('date, meal_type')
+    .gte('date', startDate)
+    .lte('date', endDate)
+    .order('date', { ascending: true })
+
+  if (hostelBlock) {
+    query = query.eq('hostel_block', hostelBlock)
+  }
+
+  const { data, error } = await query
+  if (error || !data) return []
+
+  const dayMap = new Map<string, Record<string, number>>()
+  for (const row of data) {
+    const d = row.date as string
+    const m = row.meal_type as string
+    if (!dayMap.has(d)) dayMap.set(d, { breakfast: 0, lunch: 0, snacks: 0, dinner: 0 })
+    const counts = dayMap.get(d)!
+    if (counts[m] !== undefined) counts[m]++
+  }
+
+  return Array.from(dayMap.entries()).map(([date, counts]) => ({
+    date,
+    counts,
+    total: Object.values(counts).reduce((s, c) => s + c, 0),
+  }))
+}

@@ -1,0 +1,100 @@
+import { NextResponse } from 'next/server'
+import { createClient } from '@/lib/supabase/server'
+import { getAttendanceList, getAttendanceHistory } from '@/lib/db'
+import { checkRateLimit, getClientIp, rateLimitResponse } from '@/lib/rate-limit'
+
+/** Get IST date using Intl API */
+function getISTDate() {
+  const now = new Date()
+  const TZ = 'Asia/Kolkata'
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: TZ,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  })
+  const parts = Object.fromEntries(
+    formatter.formatToParts(now).map((p) => [p.type, p.value])
+  )
+  return `${parts.year}-${parts.month}-${parts.day}`
+}
+
+/**
+ * GET — Admin: fetch detailed attendance list (who ate / who missed)
+ * Query params:
+ *  - date (YYYY-MM-DD, default: today IST)
+ *  - mealType (breakfast | lunch | snacks | dinner)
+ *  - hostelBlock
+ *  - mode=history&startDate=...&endDate=... for day-by-day history
+ */
+export async function GET(request: Request) {
+  const ip = getClientIp(request)
+  const rl = checkRateLimit(`admin-attendance-list:${ip}`, 20, 60 * 1000)
+  if (!rl.allowed) return rateLimitResponse(rl.resetAt)
+
+  try {
+    const supabase = await createClient()
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    if (!user) {
+      return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
+    }
+
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role, hostel_block')
+      .eq('id', user.id)
+      .single()
+
+    if (!profile || !['admin', 'super_admin'].includes(profile.role)) {
+      return NextResponse.json({ error: 'Forbidden — admin access required' }, { status: 403 })
+    }
+
+    const { searchParams } = new URL(request.url)
+    const mode = searchParams.get('mode')
+
+    // Enforce admin's block scope
+    let hostelBlock: string | undefined
+    if (profile.role === 'admin' && profile.hostel_block) {
+      hostelBlock = profile.hostel_block
+    } else if (searchParams.get('hostelBlock') && searchParams.get('hostelBlock') !== 'all') {
+      hostelBlock = searchParams.get('hostelBlock')!
+    }
+
+    // History mode: day-by-day counts
+    if (mode === 'history') {
+      const endDate = searchParams.get('endDate') || getISTDate()
+      const startDefault = new Date()
+      startDefault.setDate(startDefault.getDate() - 7)
+      const startDate = searchParams.get('startDate') || startDefault.toISOString().split('T')[0]
+
+      const history = await getAttendanceHistory(startDate, endDate, hostelBlock)
+      return NextResponse.json({
+        history,
+        userRole: profile.role,
+        userBlock: profile.hostel_block,
+      })
+    }
+
+    // Default: detailed list for a single date
+    const date = searchParams.get('date') || getISTDate()
+    const mealType = searchParams.get('mealType') || undefined
+
+    const result = await getAttendanceList(date, hostelBlock, mealType)
+
+    return NextResponse.json({
+      date,
+      ...result,
+      userRole: profile.role,
+      userBlock: profile.hostel_block,
+    })
+  } catch (error) {
+    console.error('Admin attendance-list GET error:', error)
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    )
+  }
+}

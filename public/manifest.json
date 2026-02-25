@@ -1,0 +1,32 @@
+{
+    "name": "Hostel Food Review System",
+    "short_name": "Food Review",
+    "description": "Institutional food quality review and analytics platform for hostel students.",
+    "start_url": "/student",
+    "display": "standalone",
+    "background_color": "#000000",
+    "theme_color": "#D4920B",
+    "orientation": "portrait-primary",
+    "scope": "/",
+    "lang": "en",
+    "icons": [
+        {
+            "src": "/icon-192.png",
+            "sizes": "192x192",
+            "type": "image/png",
+            "purpose": "any maskable"
+        },
+        {
+            "src": "/icon-512.png",
+            "sizes": "512x512",
+            "type": "image/png",
+            "purpose": "any maskable"
+        }
+    ],
+    "categories": [
+        "food",
+        "lifestyle",
+        "education"
+    ],
+    "screenshots": []
+}

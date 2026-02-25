@@ -109,6 +109,54 @@ export default function QRScanner({ onScan, className = '' }: QRScannerProps) {
     animFrameRef.current = requestAnimationFrame(scan)
   }, [])
 
+  // ── Helper: attach a MediaStream to a <video>, wait for metadata, play with retry ──
+  const attachStreamToVideo = useCallback(async (video: HTMLVideoElement, stream: MediaStream) => {
+    // Ensure playsinline works on iOS (both attribute & property)
+    video.setAttribute('playsinline', 'true')
+    video.setAttribute('webkit-playsinline', 'true')
+    video.setAttribute('autoplay', 'true')
+    video.setAttribute('muted', 'true')
+    video.muted = true          // iOS requires the property, not just the attribute
+    video.srcObject = stream
+
+    // Wait for metadata with timeout (prevents indefinite hang)
+    await new Promise<void>((resolve, reject) => {
+      const timeout = setTimeout(() => reject(new Error('Video metadata timeout')), 8000)
+      if (video.readyState >= video.HAVE_METADATA) {
+        clearTimeout(timeout)
+        resolve()
+      } else {
+        video.addEventListener('loadedmetadata', () => { clearTimeout(timeout); resolve() }, { once: true })
+        video.addEventListener('error', () => { clearTimeout(timeout); reject(video.error) }, { once: true })
+      }
+    })
+
+    // Play with retry — mobile browsers can fail transiently
+    let playSucceeded = false
+    for (let i = 0; i < 3; i++) {
+      try {
+        await video.play()
+        playSucceeded = true
+        break
+      } catch (playErr) {
+        console.warn(`video.play() attempt ${i + 1} failed:`, playErr)
+        if (i < 2) await new Promise((r) => setTimeout(r, 250))
+      }
+    }
+    if (!playSucceeded) {
+      // Last-resort: reload the source and try once more
+      video.load()
+      await new Promise((r) => setTimeout(r, 400))
+      await video.play() // let this throw if it still fails
+    }
+
+    // Start scanning frames
+    const canvas = canvasRef.current
+    if (canvas && mountedRef.current) {
+      startQRDetection(video, canvas)
+    }
+  }, [startQRDetection])
+
   // ── Start camera — attaches stream directly to video element ──
   const startCamera = useCallback(async (mode: FacingMode = 'environment') => {
     // Stop any existing stream first
@@ -152,40 +200,29 @@ export default function QRScanner({ onScan, className = '' }: QRScannerProps) {
       setPermission('granted')
       setScannerState('scanning')
 
-      // ── Directly attach stream to the video element ──
-      // We wait a microtask to ensure React has rendered the <video> element
-      // after setScannerState('scanning') above.
-      await new Promise((r) => setTimeout(r, 0))
+      // ── Attach stream to the <video> element ──
+      // AnimatePresence mode="wait" delays mounting the video element until
+      // the previous state's exit animation finishes (~300ms).
+      // We poll for the ref instead of using a single setTimeout(0).
+      let video: HTMLVideoElement | null = null
+      for (let attempt = 0; attempt < 50; attempt++) {
+        if (!mountedRef.current) {
+          stream.getTracks().forEach((t) => t.stop())
+          return
+        }
+        video = videoRef.current
+        if (video) break
+        await new Promise((r) => setTimeout(r, 60))
+      }
 
-      const video = videoRef.current
       if (!video || !mountedRef.current) {
-        stream.getTracks().forEach((t) => t.stop())
+        // Safety net: keep stream alive — the useEffect will attach it when the
+        // video element eventually mounts (see attachStreamEffect below).
+        console.warn('QRScanner: video element not ready after polling; will retry via effect')
         return
       }
 
-      // Ensure playsinline works on iOS
-      video.setAttribute('playsinline', 'true')
-      video.setAttribute('autoplay', 'true')
-      video.setAttribute('muted', 'true')
-      video.srcObject = stream
-
-      // Wait for metadata so videoWidth/Height are available
-      await new Promise<void>((resolve) => {
-        if (video.readyState >= video.HAVE_METADATA) {
-          resolve()
-        } else {
-          video.addEventListener('loadedmetadata', () => resolve(), { once: true })
-        }
-      })
-
-      // Play the video — critical on mobile
-      await video.play()
-
-      // Start scanning frames
-      const canvas = canvasRef.current
-      if (canvas && mountedRef.current) {
-        startQRDetection(video, canvas)
-      }
+      await attachStreamToVideo(video, stream)
     } catch (err: unknown) {
       if (!mountedRef.current) return
       const error = err as DOMException
@@ -208,7 +245,7 @@ export default function QRScanner({ onScan, className = '' }: QRScannerProps) {
         setErrorMessage('Failed to access camera. Please try again.')
       }
     }
-  }, [stopCamera, startQRDetection])
+  }, [stopCamera, attachStreamToVideo])
 
   // ── Flip camera ────────────────────────────────────────────
   const flipCamera = useCallback(async () => {
@@ -269,6 +306,22 @@ export default function QRScanner({ onScan, className = '' }: QRScannerProps) {
       stopCamera()
     }
   }, [checkPermission, stopCamera])
+
+  // ── Safety-net: re-attach stream when video element mounts after animation ──
+  // If startCamera's polling ended before AnimatePresence finished its exit
+  // animation, the stream is alive but not attached. This effect catches that.
+  useEffect(() => {
+    if (scannerState !== 'scanning' || !streamRef.current) return
+    const video = videoRef.current
+    if (!video) return
+    // Already attached — nothing to do
+    if (video.srcObject === streamRef.current) return
+
+    const stream = streamRef.current
+    attachStreamToVideo(video, stream).catch((err) => {
+      console.error('Safety-net stream attachment failed:', err)
+    })
+  }) // runs every render to catch the moment videoRef becomes available
 
   // ── Render ─────────────────────────────────────────────────
   return (
@@ -420,12 +473,15 @@ export default function QRScanner({ onScan, className = '' }: QRScannerProps) {
             className="relative"
           >
             <div className="relative overflow-hidden rounded-2xl border-2 border-primary/30 bg-black aspect-square max-w-[320px] mx-auto">
+              {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
               <video
                 ref={videoRef}
                 autoPlay
                 playsInline
+                webkit-playsinline="true"
                 muted
                 className="w-full h-full object-cover"
+                style={{ minHeight: '100%', minWidth: '100%' }}
               />
 
               {/* Scan overlay */}
@@ -478,6 +534,35 @@ export default function QRScanner({ onScan, className = '' }: QRScannerProps) {
                 Stop Camera
               </Button>
             </div>
+          </motion.div>
+        )}
+
+        {/* Idle with granted permission — show restart button (e.g. after Stop Camera) */}
+        {permission === 'granted' && scannerState === 'idle' && (
+          <motion.div
+            key="idle-granted"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            className="flex flex-col items-center py-10 text-center"
+          >
+            <motion.div
+              className="w-20 h-20 rounded-full bg-primary/10 border-2 border-primary/20 flex items-center justify-center mb-6"
+              animate={{ scale: [1, 1.05, 1] }}
+              transition={{ repeat: Infinity, duration: 2 }}
+            >
+              <FontAwesomeIcon icon={faCamera} className="w-8 h-8 text-primary" />
+            </motion.div>
+
+            <h3 className="text-lg font-bold text-foreground mb-2">Camera Ready</h3>
+            <p className="text-sm text-muted-foreground mb-6 max-w-[280px]">
+              Tap below to start scanning the QR code.
+            </p>
+
+            <Button onClick={() => startCamera(facing)} className="gap-2">
+              <FontAwesomeIcon icon={faCamera} className="w-4 h-4" />
+              Start Camera
+            </Button>
           </motion.div>
         )}
 

@@ -74,13 +74,23 @@ export default function StudentComplaintsPage() {
     useEffect(() => {
         loadComplaints(1)
         const supabase = createClient()
-        const channel = supabase.channel('student_complaints_realtime')
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'complaints' }, () => {
-                setPage(1)
-                loadComplaints(1)
-            })
-            .subscribe()
-        return () => { supabase.removeChannel(channel) }
+        // Scope realtime to this user's complaints to avoid O(U) reloads on every complaint change
+        let channelRef: ReturnType<typeof supabase.channel> | null = null
+        supabase.auth.getUser().then(({ data: { user: authUser } }) => {
+            if (!authUser) return
+            channelRef = supabase.channel('student_complaints_realtime')
+                .on('postgres_changes', {
+                    event: '*',
+                    schema: 'public',
+                    table: 'complaints',
+                    filter: `user_id=eq.${authUser.id}`,
+                }, () => {
+                    setPage(1)
+                    loadComplaints(1)
+                })
+                .subscribe()
+        })
+        return () => { if (channelRef) supabase.removeChannel(channelRef) }
     }, [loadComplaints])
 
     const handleSubmit = async () => {

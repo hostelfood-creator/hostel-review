@@ -50,16 +50,38 @@ export default function LoginPage() {
   // Debounced lookup: auto-fetch student details when register ID changes in register mode
   const lookupStudent = useCallback(async (regId: string) => {
     const trimmed = regId.trim()
-    if (trimmed.length < 3) {
-      setNameLocked(false)
-      setFieldsLocked(false)
-      setEmailLocked(false)
-      setForm(prev => ({ ...prev, name: '', email: '' }))
+    // Server requires 5+ chars — don't waste requests on shorter IDs
+    if (trimmed.length < 5) {
+      // Only clear auto-filled data — preserve manual input
+      if (nameLocked) {
+        setNameLocked(false)
+        setEmailLocked(false)
+        setForm(prev => ({ ...prev, name: '', email: '' }))
+      }
       return
     }
     setLookingUpName(true)
     try {
       const res = await fetch(`/api/auth/lookup?registerId=${encodeURIComponent(trimmed)}`)
+      // Handle rate limiting gracefully — unlock but preserve manual input
+      if (res.status === 429) {
+        if (nameLocked) {
+          setNameLocked(false)
+          setEmailLocked(false)
+          setForm(prev => ({ ...prev, name: '', email: '' }))
+        }
+        toast.error('Too many lookups — please wait a moment and try again.')
+        return
+      }
+      if (!res.ok) {
+        if (nameLocked) {
+          setNameLocked(false)
+          setEmailLocked(false)
+          setForm(prev => ({ ...prev, name: '', email: '' }))
+        }
+        console.error('Lookup failed:', res.status)
+        return
+      }
       const data = await res.json()
       if (data.found) {
         const autoEmail = `${trimmed.toLowerCase()}@kanchiuniv.ac.in`
@@ -67,36 +89,36 @@ export default function LoginPage() {
           ...prev,
           name: data.name,
           email: autoEmail,
-          ...(data.hostelBlock ? { hostelBlock: data.hostelBlock } : {}),
-          ...(data.department ? { department: data.department } : {}),
-          ...(data.year ? { year: data.year } : {}),
         }))
         setNameLocked(true)
-        setFieldsLocked(true)
         setEmailLocked(true)
+        // Note: hostel/dept/year are NOT auto-filled from lookup (PII protection).
+        // The server enforces correct values from XLSX records during registration.
         // Clear errors for auto-filled fields
         setFieldErrors(prev => {
           const n = { ...prev }
           delete n.name
           delete n.email
-          if (data.hostelBlock) delete n.hostelBlock
-          if (data.year) delete n.year
           return n
         })
       } else {
+        // Not found — only clear if previously auto-filled, preserve manual input
+        if (nameLocked) {
+          setForm(prev => ({ ...prev, name: '', email: '' }))
+        }
         setNameLocked(false)
-        setFieldsLocked(false)
+        setEmailLocked(false)
+      }
+    } catch {
+      if (nameLocked) {
+        setNameLocked(false)
         setEmailLocked(false)
         setForm(prev => ({ ...prev, name: '', email: '' }))
       }
-    } catch {
-      setNameLocked(false)
-      setFieldsLocked(false)
-      setEmailLocked(false)
     } finally {
       setLookingUpName(false)
     }
-  }, [])
+  }, [nameLocked])
 
   // Trigger lookup when register ID changes during registration
   useEffect(() => {
@@ -492,7 +514,7 @@ export default function LoginPage() {
                             value={form.name}
                             onChange={(e) => { if (!nameLocked) updateForm('name', e.target.value) }}
                             readOnly={nameLocked}
-                            placeholder={lookingUpName ? 'Looking up...' : form.registerId.trim().length < 3 ? 'Enter Register ID first' : 'Enter your Full Name'}
+                            placeholder={lookingUpName ? 'Looking up...' : form.registerId.trim().length < 5 ? 'Enter Register ID first' : 'Enter your Full Name'}
                             className={`h-11 text-base pr-10 ${nameLocked ? 'bg-muted cursor-not-allowed' : ''} ${fieldErrors.name ? 'border-destructive focus-visible:ring-destructive' : ''}`}
                           />
                           {lookingUpName && (
@@ -544,10 +566,9 @@ export default function LoginPage() {
                           </Label>
                           <Select
                             value={form.hostelBlock}
-                            onValueChange={(v) => { if (!fieldsLocked) updateForm('hostelBlock', v) }}
-                            disabled={fieldsLocked}
+                            onValueChange={(v) => updateForm('hostelBlock', v)}
                           >
-                            <SelectTrigger className={`h-11 ${fieldsLocked ? 'bg-muted cursor-not-allowed' : ''} ${fieldErrors.hostelBlock ? 'border-destructive' : ''}`}>
+                            <SelectTrigger className={`h-11 ${fieldErrors.hostelBlock ? 'border-destructive' : ''}`}>
                               <SelectValue placeholder="Select" />
                             </SelectTrigger>
                             <SelectContent>
@@ -594,14 +615,13 @@ export default function LoginPage() {
                           id="department"
                           type="text"
                           value={form.department}
-                          onChange={(e) => { if (!fieldsLocked) updateForm('department', e.target.value) }}
-                          readOnly={fieldsLocked}
+                          onChange={(e) => updateForm('department', e.target.value)}
                           placeholder="Enter your Department"
-                          className={`h-11 text-base ${fieldsLocked ? 'bg-muted cursor-not-allowed' : ''}`}
+                          className="h-11 text-base"
                         />
                       </div>
-                      {fieldsLocked && (
-                        <p className="text-xs text-emerald-600 dark:text-emerald-400 -mt-1">Details auto-filled from university records</p>
+                      {nameLocked && (
+                        <p className="text-xs text-emerald-600 dark:text-emerald-400 -mt-1">Name verified from university records. Hostel and department will be confirmed on submission.</p>
                       )}
                     </>
                   ) : null}

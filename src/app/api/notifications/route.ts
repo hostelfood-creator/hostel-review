@@ -135,7 +135,7 @@ export async function GET(request: Request) {
             if ((pendingCount || 0) > 0) {
                 const previewText = sanitize((pendingComplaints || [])[0]?.complaint_text, 80)
                 notifications.push({
-                    id: `pending-complaints-${pendingCount}`,
+                    id: 'pending-complaints',
                     type: 'pending_complaints',
                     title: `${pendingCount} Pending Complaint${(pendingCount || 0) > 1 ? 's' : ''}`,
                     message: previewText ? previewText + '...' : 'New complaints need your attention.',
@@ -146,15 +146,15 @@ export async function GET(request: Request) {
 
             // Check for low-rated reviews today (IST-safe)
             const today = getISTToday()
-            const { data: lowReviews, count: lowCount } = await supabase
+            const { count: lowCount } = await supabase
                 .from('reviews')
-                .select('id', { count: 'exact' })
+                .select('id', { count: 'exact', head: true })
                 .eq('date', today)
                 .lte('rating', 2)
 
             if ((lowCount || 0) >= 3) {
                 notifications.push({
-                    id: `low-ratings-${today}-${lowCount}`,
+                    id: `low-ratings-${today}`,
                     type: 'low_ratings',
                     title: 'Low Rating Alert',
                     message: `${lowCount} reviews with ratings ≤ 2 stars today. Please check the reviews section.`,

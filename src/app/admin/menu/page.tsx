@@ -36,9 +36,16 @@ const DEFAULT_TIMINGS: Record<string, string> = {
 
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
-/** Get dates for the current week (Mon-Sun) */
+/** Get IST date string YYYY-MM-DD using Intl API (avoids UTC shift) */
+function toISTDateStr(d: Date): string {
+  const formatter = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' })
+  return formatter.format(d) // en-CA = YYYY-MM-DD
+}
+
+/** Get dates for the current week (Mon-Sun) using IST */
 function getWeekDates(): { label: string; date: string; isToday: boolean }[] {
   const now = new Date()
+  const todayStr = toISTDateStr(now)
   const day = now.getDay()
   const mondayOffset = day === 0 ? -6 : 1 - day
   const monday = new Date(now)
@@ -47,8 +54,8 @@ function getWeekDates(): { label: string; date: string; isToday: boolean }[] {
   return DAYS.map((label, i) => {
     const d = new Date(monday)
     d.setDate(monday.getDate() + i)
-    const dateStr = d.toISOString().split('T')[0]
-    const isToday = dateStr === now.toISOString().split('T')[0]
+    const dateStr = toISTDateStr(d)
+    const isToday = dateStr === todayStr
     return { label, date: dateStr, isToday }
   })
 }

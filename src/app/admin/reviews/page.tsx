@@ -65,7 +65,7 @@ export default function AdminReviewsPage() {
     try {
       const params = new URLSearchParams()
       if (dateFilter) params.set('date', dateFilter)
-      if (mealFilter) params.set('mealType', mealFilter)
+      if (mealFilter && mealFilter !== 'all') params.set('mealType', mealFilter)
       if (blockFilter && blockFilter !== 'all') params.set('hostelBlock', blockFilter)
       const res = await fetch(`/api/reviews?${params}`)
       const data = await res.json()

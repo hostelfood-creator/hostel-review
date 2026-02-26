@@ -50,7 +50,8 @@ export async function GET(request: Request) {
 
     const { searchParams } = new URL(request.url)
     const date = searchParams.get('date') || undefined
-    const mealType = searchParams.get('mealType') || undefined
+    const rawMeal = searchParams.get('mealType') || undefined
+    const mealType = rawMeal && rawMeal !== 'all' ? rawMeal : undefined
 
     // For admins, enforce their assigned block. Super admins can provide it via query, or see all.
     let hostelBlock = searchParams.get('hostelBlock') || undefined

@@ -244,10 +244,12 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
                   size="icon"
                   className="rounded-full relative"
                   onClick={() => {
-                    if (!showNotifications) {
-                      markAllRead(notifications)
+                    const opening = !showNotifications
+                    setShowNotifications(opening)
+                    // Delay mark-as-read so user briefly sees unread highlights
+                    if (opening) {
+                      setTimeout(() => markAllRead(notifications), 1500)
                     }
-                    setShowNotifications(!showNotifications)
                   }}
                 >
                   <FontAwesomeIcon icon={faBell} className="w-5 h-5 text-muted-foreground" />

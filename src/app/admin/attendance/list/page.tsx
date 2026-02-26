@@ -141,9 +141,11 @@ export default function AttendanceListPage() {
     setHistoryLoading(true)
     try {
       const endDate = getISTToday()
-      const startD = new Date()
+      // Use IST-safe date arithmetic (avoids UTC offset near midnight)
+      const [y, m, d] = endDate.split('-').map(Number)
+      const startD = new Date(y, m - 1, d)
       startD.setDate(startD.getDate() - 14)
-      const startDate = startD.toISOString().split('T')[0]
+      const startDate = `${startD.getFullYear()}-${String(startD.getMonth() + 1).padStart(2, '0')}-${String(startD.getDate()).padStart(2, '0')}`
       const params = new URLSearchParams({ mode: 'history', startDate, endDate })
       if (blockFilter !== 'all') params.set('hostelBlock', blockFilter)
 

@@ -69,9 +69,13 @@ export async function GET(request: Request) {
     // History mode: day-by-day counts
     if (mode === 'history') {
       const endDate = searchParams.get('endDate') || getISTDate()
-      const startDefault = new Date()
+      // Use IST-safe date arithmetic for default start (avoids UTC offset near midnight)
+      const todayIST = getISTDate()
+      const [y, m, d] = todayIST.split('-').map(Number)
+      const startDefault = new Date(y, m - 1, d)
       startDefault.setDate(startDefault.getDate() - 7)
-      const startDate = searchParams.get('startDate') || startDefault.toISOString().split('T')[0]
+      const fallbackStart = `${startDefault.getFullYear()}-${String(startDefault.getMonth() + 1).padStart(2, '0')}-${String(startDefault.getDate()).padStart(2, '0')}`
+      const startDate = searchParams.get('startDate') || fallbackStart
 
       const history = await getAttendanceHistory(startDate, endDate, hostelBlock)
       return NextResponse.json({

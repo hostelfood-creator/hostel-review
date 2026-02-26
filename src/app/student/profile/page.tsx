@@ -61,7 +61,9 @@ export default function ProfilePage() {
         setEditYear(userData.user.year || '')
       }
       if (reviewData.reviews) {
-        setReviewCount(reviewData.reviews.length)
+        // Use server-side total from pagination for accurate count (reviews array is capped at pageSize)
+        const actualCount = reviewData.pagination?.total ?? reviewData.reviews.length
+        setReviewCount(actualCount)
         const total = reviewData.reviews.reduce((s: number, r: { rating: number }) => s + r.rating, 0)
         setAvgRating(reviewData.reviews.length > 0 ? Math.round((total / reviewData.reviews.length) * 10) / 10 : 0)
       }

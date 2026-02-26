@@ -16,9 +16,9 @@ import { lookupStudent } from '@/lib/student-lookup'
  * so the data returned corresponds to their own record.
  */
 export async function GET(request: Request) {
-  // Strict rate limit: 6 lookups per minute per IP to prevent bulk enumeration
+  // Per-IP rate limit: 20 lookups/min — hostel students share WiFi (same public IP)
   const ip = getClientIp(request)
-  const rl = checkRateLimit(`lookup:${ip}`, 6, 60 * 1000)
+  const rl = checkRateLimit(`lookup:${ip}`, 20, 60 * 1000)
   if (!rl.allowed) return rateLimitResponse(rl.resetAt)
 
   const { searchParams } = new URL(request.url)
@@ -27,6 +27,11 @@ export async function GET(request: Request) {
   if (!registerId || registerId.length < 5) {
     return NextResponse.json({ found: false }, { status: 200 })
   }
+
+  // Per-registerId rate limit: 3 lookups per minute per specific ID
+  // Prevents targeted enumeration of individual register IDs
+  const idRl = checkRateLimit(`lookup-id:${registerId}`, 3, 60 * 1000)
+  if (!idRl.allowed) return rateLimitResponse(idRl.resetAt)
 
   try {
     const record = lookupStudent(registerId)
@@ -37,12 +42,13 @@ export async function GET(request: Request) {
     await new Promise(r => setTimeout(r, jitter))
 
     if (record) {
+      // Only return the name — minimum data needed for registration UX.
+      // Hostel block, department, and year are NOT exposed here to prevent
+      // PII enumeration. These fields are enforced server-side during
+      // registration via lookupStudent() in the register route.
       return NextResponse.json({
         found: true,
         name: record.name,
-        department: record.department,
-        year: record.year,
-        hostelBlock: record.hostelBlock,
       })
     }
 

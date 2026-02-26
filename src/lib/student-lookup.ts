@@ -4,7 +4,7 @@
  * This is MITIGATED here because:
  *   1. The XLSX file is a trusted, admin-controlled file on the server filesystem
  *   2. No user-uploaded spreadsheets are ever parsed
- *   3. The parsed data (register IDs + names) is read-only and never executed
+ *   3. The parsed data (register IDs, names, dept, year, hostel) is read-only and never executed
  * If user uploads are ever added, replace xlsx with a safer alternative (e.g., exceljs).
  */
 import * as XLSX from 'xlsx'
@@ -12,21 +12,48 @@ import path from 'path'
 import fs from 'fs'
 
 /**
- * In-memory cache of Register ID → student name from the master XLSX.
+ * Student record parsed from the master XLSX.
+ * One entry per register ID, enriched with hostel block from the sheet name.
+ */
+export interface StudentRecord {
+  name: string
+  department: string | null
+  year: string | null
+  hostelBlock: string
+  roomNo: string | null
+}
+
+/**
+ * In-memory cache of Register ID → StudentRecord from the master XLSX.
  * Parsed once on first request, then reused for the process lifetime.
- * Only stores names — no emails or other PII.
+ *
+ * SOURCE FILE: "Students Details 2025-26.xlsx" — contains 5 sheets (VH, AH, MH, KH, SH),
+ * one per hostel. Each sheet has columns: Sl.No, [Admission No], Reg.No, Students Name,
+ * Dept, Yr, [Room No]. The sheet name maps to the hostel block stored in the database.
  *
  * PERFORMANCE NOTE: Uses synchronous readFileSync + XLSX.read on first access.
- * This is intentional — the file is small (~2000 rows, <100ms parse) and loaded
+ * This is intentional — the file is small (~1200 rows, <100ms parse) and loaded
  * once per process lifetime. Converting to async would change all consumer APIs
- * for negligible benefit. For files >10k rows, consider async + worker thread.
+ * for negligible benefit.
  */
-let studentCache: Map<string, string> | null = null
+let studentCache: Map<string, StudentRecord> | null = null
 
 /** Default XLSX filename — overridable via STUDENT_XLSX_PATH env var */
-const DEFAULT_XLSX_FILENAME = 'Fee Due Even semester 25032025.xlsx'
+const DEFAULT_XLSX_FILENAME = 'Students Details 2025-26.xlsx'
 
-function loadStudentData(): Map<string, string> {
+/**
+ * Sheet name → database hostel block name mapping.
+ * These must match the `hostel_blocks.name` values in Supabase exactly.
+ */
+const SHEET_TO_HOSTEL: Record<string, string> = {
+  VH: 'Visalakshi Hostel',
+  AH: 'Annapoorani Hostel',
+  MH: 'Sri Meenakshi Hostel',
+  KH: 'Sri Kamakshi Hostel',
+  SH: 'Sri Saraswathi Hostel',
+}
+
+function loadStudentData(): Map<string, StudentRecord> {
   if (studentCache) return studentCache
 
   // Configurable path: env var takes precedence over default filename in cwd
@@ -43,48 +70,81 @@ function loadStudentData(): Map<string, string> {
 
   const buffer = fs.readFileSync(filePath)
   const workbook = XLSX.read(buffer, { type: 'buffer' })
-  const sheet = workbook.Sheets[workbook.SheetNames[0]]
-  const rows: unknown[][] = XLSX.utils.sheet_to_json(sheet, { header: 1 })
+  const map = new Map<string, StudentRecord>()
 
-  const map = new Map<string, string>()
+  // Parse every sheet — each sheet represents one hostel block
+  for (const sheetName of workbook.SheetNames) {
+    const hostelBlock = SHEET_TO_HOSTEL[sheetName.trim().toUpperCase()]
+    if (!hostelBlock) {
+      console.warn(`[StudentLookup] Unknown sheet name "${sheetName}" — skipping`)
+      continue
+    }
 
-  if (rows.length === 0) {
-    console.warn('[StudentLookup] XLSX file is empty')
-    studentCache = map
-    return map
-  }
+    const sheet = workbook.Sheets[sheetName]
+    const rows: unknown[][] = XLSX.utils.sheet_to_json(sheet, { header: 1 })
+    if (rows.length === 0) continue
 
-  // Dynamic header detection — find columns by name instead of hardcoded indices
-  const headerRow = (rows[0] || []).map(h => String(h ?? '').trim().toLowerCase())
-  let nameIdx = headerRow.findIndex(h => h === 'name' || h === 'student name')
-  let regIdx = headerRow.findIndex(h => h === 'regno' || h === 'register no' || h === 'registration number' || h === 'reg no')
+    // Dynamic header detection — find the header row (some sheets like AH have empty leading rows)
+    let headerRowIdx = -1
+    for (let i = 0; i < Math.min(rows.length, 5); i++) {
+      const row = rows[i]
+      if (!row || row.length < 3) continue
+      const cells = row.map(h => String(h ?? '').trim().toLowerCase())
+      if (cells.some(c => c.includes('reg') || c.includes('students name'))) {
+        headerRowIdx = i
+        break
+      }
+    }
 
-  // Fallback to legacy hardcoded indices if headers don't match
-  // Columns: 0=Sl.No, 1=Name, 2=Regno (known layout from "Fee Due Even semester" file)
-  if (nameIdx === -1) nameIdx = 1
-  if (regIdx === -1) regIdx = 2
+    if (headerRowIdx === -1) {
+      console.warn(`[StudentLookup] No header row found in sheet "${sheetName}" — skipping`)
+      continue
+    }
 
-  for (let i = 1; i < rows.length; i++) {
-    const row = rows[i]
-    if (!row || !row[regIdx]) continue
+    const headerRow = (rows[headerRowIdx] || []).map(h => String(h ?? '').trim().toLowerCase())
 
-    const regNo = String(row[regIdx]).trim().toUpperCase()
-    if (!map.has(regNo)) {
-      map.set(regNo, String(row[nameIdx] || '').trim())
+    // Find column indices by header name (handles varying column layouts per sheet)
+    const regIdx = headerRow.findIndex(h => h.includes('reg'))
+    const nameIdx = headerRow.findIndex(h => h.includes('students name') || h === 'name')
+    const deptIdx = headerRow.findIndex(h => h.includes('dept'))
+    const yearIdx = headerRow.findIndex(h => h === 'yr' || h === 'year')
+    const roomIdx = headerRow.findIndex(h => h.includes('room'))
+
+    if (regIdx === -1 || nameIdx === -1) {
+      console.warn(`[StudentLookup] Missing Reg.No or Students Name column in sheet "${sheetName}"`)
+      continue
+    }
+
+    for (let i = headerRowIdx + 1; i < rows.length; i++) {
+      const row = rows[i]
+      if (!row || !row[regIdx]) continue
+
+      const regNo = String(row[regIdx]).trim().toUpperCase()
+      if (!regNo || regNo.length < 3) continue
+
+      // Skip if already seen (first occurrence wins — shouldn't have duplicates across sheets)
+      if (!map.has(regNo)) {
+        map.set(regNo, {
+          name: String(row[nameIdx] || '').trim(),
+          department: deptIdx >= 0 ? (String(row[deptIdx] || '').trim() || null) : null,
+          year: yearIdx >= 0 ? (String(row[yearIdx] || '').trim() || null) : null,
+          hostelBlock,
+          roomNo: roomIdx >= 0 ? (String(row[roomIdx] || '').trim() || null) : null,
+        })
+      }
     }
   }
 
   studentCache = map
-  console.log(`[StudentLookup] Loaded ${map.size} students from XLSX`)
+  console.log(`[StudentLookup] Loaded ${map.size} students from ${workbook.SheetNames.length} hostel sheets`)
   return map
 }
 
 /**
- * Look up a student name by Register ID from the master XLSX.
- * Returns the name if found, or null if not found.
- * This is the preferred API — avoids exposing the full cache to callers.
+ * Look up full student details by Register ID from the master XLSX.
+ * Returns the full StudentRecord if found, or null if not found.
  */
-export function lookupStudentName(registerId: string): string | null {
+export function lookupStudent(registerId: string): StudentRecord | null {
   try {
     const students = loadStudentData()
     return students.get(registerId.trim().toUpperCase()) || null
@@ -92,4 +152,13 @@ export function lookupStudentName(registerId: string): string | null {
     console.error('[StudentLookup] Error:', error instanceof Error ? error.message : error)
     return null
   }
+}
+
+/**
+ * Look up only the student name by Register ID.
+ * Backward-compatible wrapper — used by profile edit guard and registration name verification.
+ */
+export function lookupStudentName(registerId: string): string | null {
+  const record = lookupStudent(registerId)
+  return record?.name || null
 }

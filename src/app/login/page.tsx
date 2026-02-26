@@ -28,6 +28,7 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
   const [nameLocked, setNameLocked] = useState(false)
+  const [fieldsLocked, setFieldsLocked] = useState(false)
   const [lookingUpName, setLookingUpName] = useState(false)
   const lookupTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -44,11 +45,12 @@ export default function LoginPage() {
     confirmPassword: '',
   })
 
-  // Debounced lookup: auto-fetch student name when register ID changes in register mode
+  // Debounced lookup: auto-fetch student details when register ID changes in register mode
   const lookupStudent = useCallback(async (regId: string) => {
     const trimmed = regId.trim()
     if (trimmed.length < 3) {
       setNameLocked(false)
+      setFieldsLocked(false)
       setForm(prev => ({ ...prev, name: '' }))
       return
     }
@@ -60,16 +62,28 @@ export default function LoginPage() {
         setForm(prev => ({
           ...prev,
           name: data.name,
+          ...(data.hostelBlock ? { hostelBlock: data.hostelBlock } : {}),
+          ...(data.department ? { department: data.department } : {}),
+          ...(data.year ? { year: data.year } : {}),
         }))
         setNameLocked(true)
-        // Clear name error if any
-        setFieldErrors(prev => { const n = { ...prev }; delete n.name; return n })
+        setFieldsLocked(true)
+        // Clear errors for auto-filled fields
+        setFieldErrors(prev => {
+          const n = { ...prev }
+          delete n.name
+          if (data.hostelBlock) delete n.hostelBlock
+          if (data.year) delete n.year
+          return n
+        })
       } else {
         setNameLocked(false)
+        setFieldsLocked(false)
         setForm(prev => ({ ...prev, name: '' }))
       }
     } catch {
       setNameLocked(false)
+      setFieldsLocked(false)
     } finally {
       setLookingUpName(false)
     }
@@ -457,9 +471,10 @@ export default function LoginPage() {
                           </Label>
                           <Select
                             value={form.hostelBlock}
-                            onValueChange={(v) => updateForm('hostelBlock', v)}
+                            onValueChange={(v) => { if (!fieldsLocked) updateForm('hostelBlock', v) }}
+                            disabled={fieldsLocked}
                           >
-                            <SelectTrigger className={`h-11 ${fieldErrors.hostelBlock ? 'border-destructive' : ''}`}>
+                            <SelectTrigger className={`h-11 ${fieldsLocked ? 'bg-muted cursor-not-allowed' : ''} ${fieldErrors.hostelBlock ? 'border-destructive' : ''}`}>
                               <SelectValue placeholder="Select" />
                             </SelectTrigger>
                             <SelectContent>
@@ -480,9 +495,10 @@ export default function LoginPage() {
                           </Label>
                           <Select
                             value={form.year}
-                            onValueChange={(v) => updateForm('year', v)}
+                            onValueChange={(v) => { if (!fieldsLocked) updateForm('year', v) }}
+                            disabled={fieldsLocked}
                           >
-                            <SelectTrigger className={`h-11 ${fieldErrors.year ? 'border-destructive' : ''}`}>
+                            <SelectTrigger className={`h-11 ${fieldsLocked ? 'bg-muted cursor-not-allowed' : ''} ${fieldErrors.year ? 'border-destructive' : ''}`}>
                               <SelectValue placeholder="Select" />
                             </SelectTrigger>
                             <SelectContent>
@@ -505,11 +521,15 @@ export default function LoginPage() {
                           id="department"
                           type="text"
                           value={form.department}
-                          onChange={(e) => updateForm('department', e.target.value)}
+                          onChange={(e) => { if (!fieldsLocked) updateForm('department', e.target.value) }}
+                          readOnly={fieldsLocked}
                           placeholder="Enter your Department"
-                          className="h-11 text-base"
+                          className={`h-11 text-base ${fieldsLocked ? 'bg-muted cursor-not-allowed' : ''}`}
                         />
                       </div>
+                      {fieldsLocked && (
+                        <p className="text-xs text-emerald-600 dark:text-emerald-400 -mt-1">Details auto-filled from university records</p>
+                      )}
                     </>
                   ) : null}
 
@@ -600,6 +620,7 @@ export default function LoginPage() {
                     onClick={() => {
                       setIsRegister(!isRegister)
                       setNameLocked(false)
+                      setFieldsLocked(false)
                       setLookingUpName(false)
                       setError('')
                       setFieldErrors({})

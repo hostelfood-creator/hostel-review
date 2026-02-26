@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { checkRateLimitAsync, getClientIp, rateLimitResponse } from '@/lib/rate-limit'
-import { lookupStudentName } from '@/lib/student-lookup'
+import { lookupStudent } from '@/lib/student-lookup'
 
 // ── Input validation helpers ──────────────────────────────
 function validateRegistrationInput(body: Record<string, unknown>) {
@@ -53,10 +53,14 @@ export async function POST(request: Request) {
     const { cleanId, cleanName, cleanEmail, cleanPass } = validation
     const { hostelBlock, department, year } = body
 
-    // Server-side XLSX name verification — if the register ID is in university records,
-    // enforce the official name to prevent spoofing
-    const xlsxName = lookupStudentName(cleanId)
-    const verifiedName = xlsxName || cleanName // Use XLSX name if found, else client-provided
+    // Server-side XLSX verification — if the register ID is in university records,
+    // enforce the official name and auto-assign hostel/dept/year to prevent spoofing
+    const xlsxRecord = lookupStudent(cleanId)
+    const verifiedName = xlsxRecord?.name || cleanName
+    // Prefer XLSX hostel/dept/year over client-provided values (authoritative source)
+    const verifiedHostel = xlsxRecord?.hostelBlock || (hostelBlock ? String(hostelBlock).trim() : null)
+    const verifiedDept = xlsxRecord?.department || (department ? String(department).trim().slice(0, 60) : null)
+    const verifiedYear = xlsxRecord?.year || (year ? String(year).trim().slice(0, 10) : null)
 
     // Duplicate email check — only one account per email address
     const { createClient: createSupabaseAdmin } = await import('@supabase/supabase-js')
@@ -80,6 +84,20 @@ export async function POST(request: Request) {
         { error: 'Registration failed. Please try again or sign in.' },
         { status: 409 }
       )
+    }
+
+    // 2. Validate hostel block exists BEFORE creating auth user (prevents orphaned entries)
+    let cleanBlock: string | null = null
+    if (verifiedHostel) {
+      const { data: blockExists } = await adminClient
+        .from('hostel_blocks')
+        .select('id')
+        .eq('name', verifiedHostel)
+        .maybeSingle()
+      if (!blockExists) {
+        return NextResponse.json({ error: 'Invalid hostel block' }, { status: 400 })
+      }
+      cleanBlock = verifiedHostel
     }
 
     const cookieStore = await cookies()
@@ -132,20 +150,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Failed to create user' }, { status: 500 })
     }
 
-    // 2. Validate hostel block exists (if provided)
-    let cleanBlock: string | null = null
-    if (hostelBlock) {
-      const { data: blockExists } = await adminClient
-        .from('hostel_blocks')
-        .select('id')
-        .eq('name', String(hostelBlock).trim())
-        .maybeSingle()
-      if (!blockExists) {
-        return NextResponse.json({ error: 'Invalid hostel block' }, { status: 400 })
-      }
-      cleanBlock = String(hostelBlock).trim()
-    }
-
     // 3. Create user profile
     const { error: profileError } = await supabase.from('profiles').insert({
       id: authData.user.id,
@@ -154,8 +158,8 @@ export async function POST(request: Request) {
       email: cleanEmail,
       role: 'student',
       hostel_block: cleanBlock,
-      department: department ? String(department).trim().slice(0, 60) : null,
-      year: year ? String(year).trim().slice(0, 10) : null,
+      department: verifiedDept,
+      year: verifiedYear,
     })
 
     if (profileError) {

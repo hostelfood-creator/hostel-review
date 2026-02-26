@@ -1,11 +1,15 @@
 import { NextResponse } from 'next/server'
 import { checkRateLimit, getClientIp, rateLimitResponse } from '@/lib/rate-limit'
-import { lookupStudentName } from '@/lib/student-lookup'
+import { lookupStudent } from '@/lib/student-lookup'
 
 /**
  * GET /api/auth/lookup?registerId=112451026
- * Returns only the student name from the master XLSX.
- * No email or other PII is exposed. Used on the registration page to auto-fill the name field.
+ * Returns student details (name, department, year, hostelBlock) from the master XLSX.
+ * Used on the registration page to auto-fill fields when the student enters their Register ID.
+ *
+ * SOURCE: "Students Details 2025-26.xlsx" — 5 sheets (VH, AH, MH, KH, SH), one per hostel.
+ * Each sheet has: Sl.No, [Admission No], Reg.No, Students Name, Dept, Yr, [Room No].
+ * The sheet name determines the hostel block.
  */
 export async function GET(request: Request) {
   // Rate limit: 10 lookups per minute per IP to prevent enumeration
@@ -21,10 +25,16 @@ export async function GET(request: Request) {
   }
 
   try {
-    const name = lookupStudentName(registerId)
+    const record = lookupStudent(registerId)
 
-    if (name) {
-      return NextResponse.json({ found: true, name })
+    if (record) {
+      return NextResponse.json({
+        found: true,
+        name: record.name,
+        department: record.department,
+        year: record.year,
+        hostelBlock: record.hostelBlock,
+      })
     }
 
     return NextResponse.json({ found: false })

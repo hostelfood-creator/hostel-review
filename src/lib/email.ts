@@ -69,6 +69,9 @@ export function buildWelcomeEmail(params: WelcomeEmailParams): string {
   <meta http-equiv="X-UA-Compatible" content="IE=edge" />
   <meta name="x-apple-disable-message-reformatting" />
   <title>Welcome to SCSVMV Hostel Review Portal</title>
+  <!--[if !mso]><!-->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap" rel="stylesheet" />
+  <!--<![endif]-->
   <!--[if mso]>
   <noscript><xml><o:OfficeDocumentSettings><o:PixelsPerInch>96</o:PixelsPerInch></o:OfficeDocumentSettings></xml></noscript>
   <style type="text/css">
@@ -90,11 +93,11 @@ export function buildWelcomeEmail(params: WelcomeEmailParams): string {
       .info-label { width: 100px !important; font-size: 11px !important; }
       .cta-link { padding: 13px 32px !important; font-size: 13px !important; }
       .footer-pad { padding: 20px 16px !important; }
-      .feature-row td { display: block !important; width: 100% !important; padding-left: 0 !important; padding-right: 0 !important; }
+      .feature-card { max-width: 100% !important; }
     }
   </style>
 </head>
-<body style="margin:0;padding:0;background:#eef2f5;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;">
+<body style="margin:0;padding:0;background:#eef2f5;font-family:Inter,'Helvetica Neue',Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;">
 
   <!-- Outer wrapper -->
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#eef2f5;">
@@ -130,7 +133,7 @@ export function buildWelcomeEmail(params: WelcomeEmailParams): string {
               <p style="margin:0 0 10px;color:#23857a;font-size:12px;font-weight:700;letter-spacing:2.5px;text-transform:uppercase;">
                 Account Confirmed
               </p>
-              <h1 class="hero-title" style="margin:0 0 14px;color:#0a1628;font-size:28px;font-weight:800;letter-spacing:-0.3px;line-height:34px;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">
+              <h1 class="hero-title" style="margin:0 0 14px;color:#0a1628;font-size:28px;font-weight:800;letter-spacing:-0.3px;line-height:34px;font-family:Inter,'Helvetica Neue',Helvetica,Arial,sans-serif;">
                 Welcome to the<br/>Hostel Review Portal
               </h1>
               <p style="margin:0;color:#64748b;font-size:14px;line-height:1.7;max-width:440px;">
@@ -188,103 +191,85 @@ export function buildWelcomeEmail(params: WelcomeEmailParams): string {
           <!-- FEATURES SECTION -->
           <tr>
             <td align="center" style="padding:12px 40px 4px;">
-              <p style="margin:0 0 4px;color:#23857a;font-size:11px;font-weight:700;letter-spacing:2.5px;text-transform:uppercase;">Portal Features</p>
-              <h2 style="margin:0 0 20px;color:#0a1628;font-size:20px;font-weight:800;letter-spacing:-0.2px;">
-                What You Can Do
+              <p style="margin:0 0 4px;color:#23857a;font-size:11px;font-weight:700;letter-spacing:2.5px;text-transform:uppercase;font-family:Inter,'Helvetica Neue',Helvetica,Arial,sans-serif;">Portal Features</p>
+              <h2 style="margin:0 0 20px;color:#0a1628;font-size:22px;font-weight:900;letter-spacing:-0.3px;text-transform:uppercase;font-family:Inter,'Helvetica Neue',Helvetica,Arial,sans-serif;">
+                Explore the Portal
               </h2>
             </td>
           </tr>
 
           <tr>
             <td class="section-pad" style="padding:0 40px 28px;">
-              <!-- Features — single column, guaranteed responsive -->
-              <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+              <!-- Feature cards — 2-column fluid hybrid (stacks on mobile without media queries) -->
 
-                <!-- Feature 1 -->
-                <tr>
-                  <td style="padding:0 0 10px;">
-                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#fefce8;border:1px solid #fef08a;border-radius:10px;">
-                      <tr>
-                        <td style="width:48px;vertical-align:top;padding:16px 0 16px 16px;">
-                          <table role="presentation" cellpadding="0" cellspacing="0"><tr>
-                            <td style="width:40px;height:40px;background:#fbbf24;border-radius:8px;text-align:center;vertical-align:middle;">
-                              <img src="https://api.iconify.design/fa6-solid/star.svg?color=%23ffffff&width=20&height=20" alt="Rate" width="20" height="20" style="display:block;margin:auto;border:0;" />
-                            </td>
-                          </tr></table>
+              <!--[if mso]><table role="presentation" cellpadding="0" cellspacing="0" width="100%"><tr><td width="248" valign="top"><![endif]-->
+              <div class="feature-card" style="display:inline-block;width:100%;max-width:248px;vertical-align:top;">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:12px;">
+                  <tr>
+                    <td style="background:#fefce8;border:1px solid #fef08a;border-radius:14px;padding:24px 20px;">
+                      <table role="presentation" cellpadding="0" cellspacing="0"><tr>
+                        <td style="width:44px;height:44px;background:#fbbf24;border-radius:50%;text-align:center;vertical-align:middle;">
+                          <img src="https://api.iconify.design/fa6-solid/star.svg?color=%23ffffff&width=22&height=22" alt="Rate" width="22" height="22" style="display:block;margin:auto;border:0;" />
                         </td>
-                        <td style="padding:16px 16px 16px 14px;vertical-align:top;">
-                          <p style="margin:0 0 3px;color:#0a1628;font-size:14px;font-weight:700;">Rate Daily Meals</p>
-                          <p style="margin:0;color:#78716c;font-size:12px;line-height:1.5;">Rate breakfast, lunch, snacks, and dinner on a 1&ndash;5 scale with descriptive tags.</p>
+                      </tr></table>
+                      <p style="margin:14px 0 6px;color:#0a1628;font-size:15px;font-weight:800;text-transform:uppercase;line-height:1.2;font-family:Inter,'Helvetica Neue',Helvetica,Arial,sans-serif;">Rate Daily<br/>Meals</p>
+                      <p style="margin:0;color:#78716c;font-size:12px;line-height:1.5;font-family:Inter,'Helvetica Neue',Helvetica,Arial,sans-serif;">Breakfast, Lunch, Snacks &amp; Dinner &mdash; rate 1&ndash;5 stars with tags.</p>
+                    </td>
+                  </tr>
+                </table>
+              </div>
+              <!--[if mso]></td><td width="24"></td><td width="248" valign="top"><![endif]-->
+              <div class="feature-card" style="display:inline-block;width:100%;max-width:248px;vertical-align:top;">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:12px;">
+                  <tr>
+                    <td style="background:#ecfdf5;border:1px solid #a7f3d0;border-radius:14px;padding:24px 20px;">
+                      <table role="presentation" cellpadding="0" cellspacing="0"><tr>
+                        <td style="width:44px;height:44px;background:#34d399;border-radius:50%;text-align:center;vertical-align:middle;">
+                          <img src="https://api.iconify.design/fa6-solid/qrcode.svg?color=%23ffffff&width=22&height=22" alt="QR" width="22" height="22" style="display:block;margin:auto;border:0;" />
                         </td>
-                      </tr>
-                    </table>
-                  </td>
-                </tr>
+                      </tr></table>
+                      <p style="margin:14px 0 6px;color:#0a1628;font-size:15px;font-weight:800;text-transform:uppercase;line-height:1.2;font-family:Inter,'Helvetica Neue',Helvetica,Arial,sans-serif;">QR<br/>Check-in</p>
+                      <p style="margin:0;color:#78716c;font-size:12px;line-height:1.5;font-family:Inter,'Helvetica Neue',Helvetica,Arial,sans-serif;">Scan the mess QR code to record your meal attendance.</p>
+                    </td>
+                  </tr>
+                </table>
+              </div>
+              <!--[if mso]></td></tr></table><![endif]-->
 
-                <!-- Feature 2 -->
-                <tr>
-                  <td style="padding:0 0 10px;">
-                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#ecfdf5;border:1px solid #a7f3d0;border-radius:10px;">
-                      <tr>
-                        <td style="width:48px;vertical-align:top;padding:16px 0 16px 16px;">
-                          <table role="presentation" cellpadding="0" cellspacing="0"><tr>
-                            <td style="width:40px;height:40px;background:#34d399;border-radius:8px;text-align:center;vertical-align:middle;">
-                              <img src="https://api.iconify.design/fa6-solid/qrcode.svg?color=%23ffffff&width=20&height=20" alt="QR" width="20" height="20" style="display:block;margin:auto;border:0;" />
-                            </td>
-                          </tr></table>
+              <!--[if mso]><table role="presentation" cellpadding="0" cellspacing="0" width="100%"><tr><td width="248" valign="top"><![endif]-->
+              <div class="feature-card" style="display:inline-block;width:100%;max-width:248px;vertical-align:top;">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:12px;">
+                  <tr>
+                    <td style="background:#fdf2f8;border:1px solid #fbcfe8;border-radius:14px;padding:24px 20px;">
+                      <table role="presentation" cellpadding="0" cellspacing="0"><tr>
+                        <td style="width:44px;height:44px;background:#f472b6;border-radius:50%;text-align:center;vertical-align:middle;">
+                          <img src="https://api.iconify.design/fa6-solid/comment-dots.svg?color=%23ffffff&width=22&height=22" alt="Complaints" width="22" height="22" style="display:block;margin:auto;border:0;" />
                         </td>
-                        <td style="padding:16px 16px 16px 14px;vertical-align:top;">
-                          <p style="margin:0 0 3px;color:#0a1628;font-size:14px;font-weight:700;">QR Code Check-in</p>
-                          <p style="margin:0;color:#78716c;font-size:12px;line-height:1.5;">Scan the mess hall QR code to record your meal attendance instantly.</p>
+                      </tr></table>
+                      <p style="margin:14px 0 6px;color:#0a1628;font-size:15px;font-weight:800;text-transform:uppercase;line-height:1.2;font-family:Inter,'Helvetica Neue',Helvetica,Arial,sans-serif;">File<br/>Complaints</p>
+                      <p style="margin:0;color:#78716c;font-size:12px;line-height:1.5;font-family:Inter,'Helvetica Neue',Helvetica,Arial,sans-serif;">Report food quality or hygiene issues directly to admin.</p>
+                    </td>
+                  </tr>
+                </table>
+              </div>
+              <!--[if mso]></td><td width="24"></td><td width="248" valign="top"><![endif]-->
+              <div class="feature-card" style="display:inline-block;width:100%;max-width:248px;vertical-align:top;">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:12px;">
+                  <tr>
+                    <td style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:14px;padding:24px 20px;">
+                      <table role="presentation" cellpadding="0" cellspacing="0"><tr>
+                        <td style="width:44px;height:44px;background:#60a5fa;border-radius:50%;text-align:center;vertical-align:middle;">
+                          <img src="https://api.iconify.design/fa6-solid/clock-rotate-left.svg?color=%23ffffff&width=22&height=22" alt="History" width="22" height="22" style="display:block;margin:auto;border:0;" />
                         </td>
-                      </tr>
-                    </table>
-                  </td>
-                </tr>
+                      </tr></table>
+                      <p style="margin:14px 0 6px;color:#0a1628;font-size:15px;font-weight:800;text-transform:uppercase;line-height:1.2;font-family:Inter,'Helvetica Neue',Helvetica,Arial,sans-serif;">Track<br/>History</p>
+                      <p style="margin:0;color:#78716c;font-size:12px;line-height:1.5;font-family:Inter,'Helvetica Neue',Helvetica,Arial,sans-serif;">View all your past reviews, check-ins and complaint status.</p>
+                    </td>
+                  </tr>
+                </table>
+              </div>
+              <!--[if mso]></td></tr></table><![endif]-->
 
-                <!-- Feature 3 -->
-                <tr>
-                  <td style="padding:0 0 10px;">
-                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#fdf2f8;border:1px solid #fbcfe8;border-radius:10px;">
-                      <tr>
-                        <td style="width:48px;vertical-align:top;padding:16px 0 16px 16px;">
-                          <table role="presentation" cellpadding="0" cellspacing="0"><tr>
-                            <td style="width:40px;height:40px;background:#f472b6;border-radius:8px;text-align:center;vertical-align:middle;">
-                              <img src="https://api.iconify.design/fa6-solid/comment-dots.svg?color=%23ffffff&width=20&height=20" alt="Complaints" width="20" height="20" style="display:block;margin:auto;border:0;" />
-                            </td>
-                          </tr></table>
-                        </td>
-                        <td style="padding:16px 16px 16px 14px;vertical-align:top;">
-                          <p style="margin:0 0 3px;color:#0a1628;font-size:14px;font-weight:700;">File Complaints</p>
-                          <p style="margin:0;color:#78716c;font-size:12px;line-height:1.5;">Report food quality or hygiene issues directly to hostel administration.</p>
-                        </td>
-                      </tr>
-                    </table>
-                  </td>
-                </tr>
-
-                <!-- Feature 4 -->
-                <tr>
-                  <td style="padding:0;">
-                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;">
-                      <tr>
-                        <td style="width:48px;vertical-align:top;padding:16px 0 16px 16px;">
-                          <table role="presentation" cellpadding="0" cellspacing="0"><tr>
-                            <td style="width:40px;height:40px;background:#60a5fa;border-radius:8px;text-align:center;vertical-align:middle;">
-                              <img src="https://api.iconify.design/fa6-solid/clock-rotate-left.svg?color=%23ffffff&width=20&height=20" alt="History" width="20" height="20" style="display:block;margin:auto;border:0;" />
-                            </td>
-                          </tr></table>
-                        </td>
-                        <td style="padding:16px 16px 16px 14px;vertical-align:top;">
-                          <p style="margin:0 0 3px;color:#0a1628;font-size:14px;font-weight:700;">Track History</p>
-                          <p style="margin:0;color:#78716c;font-size:12px;line-height:1.5;">View all your past reviews, check-in records, and complaint statuses.</p>
-                        </td>
-                      </tr>
-                    </table>
-                  </td>
-                </tr>
-
-              </table>
             </td>
           </tr>
 
@@ -379,7 +364,7 @@ export function buildWelcomeEmail(params: WelcomeEmailParams): string {
           <tr>
             <td align="center" style="padding:0 40px 36px;text-align:center;">
               <p style="margin:0 0 2px;color:#64748b;font-size:13px;">Join a growing community of</p>
-              <p style="margin:0 0 4px;color:#0a1628;font-size:44px;font-weight:900;letter-spacing:-1px;line-height:1;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">1,100+</p>
+              <p style="margin:0 0 4px;color:#0a1628;font-size:44px;font-weight:900;letter-spacing:-1px;line-height:1;font-family:Inter,'Helvetica Neue',Helvetica,Arial,sans-serif;">1,100+</p>
               <p style="margin:0;color:#64748b;font-size:13px;">students already using the portal</p>
             </td>
           </tr>

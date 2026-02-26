@@ -27,6 +27,7 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [showPassword, setShowPassword] = useState(false)
+  const [rememberMe, setRememberMe] = useState(false)
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
   const [nameLocked, setNameLocked] = useState(false)
   const [fieldsLocked, setFieldsLocked] = useState(false)
@@ -249,7 +250,7 @@ export default function LoginPage() {
       const endpoint = isRegister ? '/api/auth/register' : '/api/auth/login'
       const body = isRegister
         ? form
-        : { registerId: form.registerId, password: form.password }
+        : { registerId: form.registerId, password: form.password, rememberMe }
 
       const res = await fetch(endpoint, {
         method: 'POST',
@@ -706,6 +707,25 @@ export default function LoginPage() {
                           </button>
                         )}
                       </div>
+                    </div>
+                  )}
+
+                  {/* Remember Me — login mode only */}
+                  {!isForgotPassword && !isRegister && (
+                    <div className="flex items-center gap-2 -mt-1">
+                      <input
+                        id="rememberMe"
+                        type="checkbox"
+                        checked={rememberMe}
+                        onChange={(e) => setRememberMe(e.target.checked)}
+                        className="h-4 w-4 rounded border-border text-primary focus:ring-primary/30 accent-primary cursor-pointer"
+                      />
+                      <Label
+                        htmlFor="rememberMe"
+                        className="text-sm text-muted-foreground cursor-pointer select-none hover:text-foreground transition-colors"
+                      >
+                        Remember me
+                      </Label>
                     </div>
                   )}
 

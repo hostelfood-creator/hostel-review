@@ -12,7 +12,8 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json()
-    const { registerId, password } = body
+    const { registerId, password, rememberMe } = body
+    const extendSession = rememberMe === true
 
     if (!registerId || !password) {
       return NextResponse.json(
@@ -133,9 +134,17 @@ export async function POST(request: Request) {
       },
     })
 
-    // Attach every auth cookie Supabase generated to the response
+    // Attach every auth cookie Supabase generated to the response.
+    // "Remember Me" unchecked → session cookie (expires when browser closes).
+    // "Remember Me" checked   → keep Supabase's default maxAge (persistent).
     for (const { name, value, options } of pendingCookies) {
-      response.cookies.set(name, value, options as any)
+      const cookieOpts = { ...options } as Record<string, unknown>
+      if (!extendSession) {
+        // Remove maxAge so the cookie becomes session-scoped (dies on browser close)
+        delete cookieOpts.maxAge
+        delete cookieOpts.expires
+      }
+      response.cookies.set(name, value, cookieOpts as any)
     }
 
     return response

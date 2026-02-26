@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server'
-import { createClient as createSupabaseAdmin } from '@supabase/supabase-js'
 import crypto from 'crypto'
 import { checkRateLimitAsync, getClientIp, rateLimitResponse } from '@/lib/rate-limit'
 import { getTransporter, getSender } from '@/lib/email'
+import { createServiceClient } from '@/lib/supabase/service'
 
 // Fully responsive institutional email — works on Gmail, Outlook, Apple Mail, and mobile
 function buildOtpEmail(name: string, registerId: string, otp: string): string {
@@ -188,18 +188,7 @@ export async function POST(request: Request) {
 
     // 1. Create service-role client FIRST — bypasses RLS so profile lookup works
     //    even when no user is logged in (which is always the case during forgot-password)
-    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-    if (!serviceRoleKey || !supabaseUrl) {
-      console.error('CRITICAL: SUPABASE_SERVICE_ROLE_KEY or NEXT_PUBLIC_SUPABASE_URL is not set — forgot password cannot work')
-      return NextResponse.json({ error: 'Server configuration error. Please contact admin.' }, { status: 500 })
-    }
-
-    const supabaseAdmin = createSupabaseAdmin(
-      supabaseUrl,
-      serviceRoleKey,
-      { auth: { autoRefreshToken: false, persistSession: false } }
-    )
+    const supabaseAdmin = createServiceClient()
 
     // 2. Look up the user — by email or register_id using admin client (bypasses RLS)
     //    Use .limit(1) instead of .single() to avoid failures when duplicate rows exist

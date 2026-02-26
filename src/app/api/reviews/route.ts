@@ -54,7 +54,10 @@ export async function GET(request: Request) {
 
     // For admins, enforce their assigned block. Super admins can provide it via query, or see all.
     let hostelBlock = searchParams.get('hostelBlock') || undefined
-    if (profile?.role === 'admin' && profile.hostel_block) {
+    if (profile?.role === 'admin') {
+      if (!profile.hostel_block) {
+        return NextResponse.json({ error: 'Your admin account has no hostel block assigned' }, { status: 403 })
+      }
       hostelBlock = profile.hostel_block
     }
 
@@ -66,7 +69,11 @@ export async function GET(request: Request) {
     if (date) filters.date = date
     if (mealType) filters.mealType = mealType
     if (hostelBlock) filters.hostelBlock = hostelBlock
-    if (profile?.role === 'student') filters.userId = user.id
+    // Default to most restrictive access: filter by userId unless the role is explicitly admin/super_admin.
+    // This ensures null/unexpected roles cannot see other users' reviews.
+    if (profile.role !== 'admin' && profile.role !== 'super_admin') {
+      filters.userId = user.id
+    }
     filters.limit = pageSize
     filters.offset = (page - 1) * pageSize
 

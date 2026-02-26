@@ -18,7 +18,8 @@ export async function GET(request: Request) {
     }
 
     const { data: profile } = await supabase.from('profiles').select('role, hostel_block').eq('id', user.id).single()
-    if (!profile || profile.role === 'student') {
+    // Fail-closed: only admin and super_admin roles may access analytics
+    if (!profile || !['admin', 'super_admin'].includes(profile.role)) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
     }
 

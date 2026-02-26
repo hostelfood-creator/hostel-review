@@ -54,6 +54,9 @@ export async function GET(request: Request) {
             query = query.eq('hostel_block', profile.hostel_block)
         } else if (profile.role === 'super_admin' && hostelBlockFilter) {
             query = query.eq('hostel_block', hostelBlockFilter)
+        } else if (profile.role !== 'super_admin') {
+            // Fail-closed: unknown/null roles default to own records only
+            query = query.eq('user_id', user.id)
         }
 
         if (statusFilter && VALID_STATUSES.includes(statusFilter)) {

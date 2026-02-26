@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
 import crypto from 'crypto'
 import { checkRateLimitAsync, getClientIp, rateLimitResponse } from '@/lib/rate-limit'
+import { createServiceClient } from '@/lib/supabase/service'
 
 export async function POST(request: Request) {
     // Rate limit: 5 OTP verify attempts per 15 minutes per IP (Redis-backed in production)
@@ -44,20 +44,9 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Password must be at most 128 characters' }, { status: 400 })
         }
 
-        // 1. We must use the Service Role Key to bypass RLS and update a user's password directly
+        // 1. Create service-role client — bypasses RLS to update password directly
         //    The service role key is REQUIRED — anon key CANNOT call auth.admin methods
-        const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-        if (!serviceRoleKey || !supabaseUrl) {
-            console.error('CRITICAL: SUPABASE_SERVICE_ROLE_KEY or SUPABASE_URL is not set — password reset cannot work')
-            return NextResponse.json({ error: 'Server configuration error. Please contact admin.' }, { status: 500 })
-        }
-
-        const supabaseAdmin = createClient(
-            supabaseUrl,
-            serviceRoleKey,
-            { auth: { autoRefreshToken: false, persistSession: false } }
-        )
+        const supabaseAdmin = createServiceClient()
 
         // 2. Look up the password_resets record by email or register_id
         //    OTPs are stored as SHA-256 hashes — hash the user input before querying.

@@ -209,7 +209,7 @@ export function buildWelcomeEmail(params: WelcomeEmailParams): string {
                     <td style="background:#fefce8;border:1px solid #fef08a;border-radius:14px;padding:24px 20px;">
                       <table role="presentation" cellpadding="0" cellspacing="0"><tr>
                         <td style="width:44px;height:44px;background:#fbbf24;border-radius:50%;text-align:center;vertical-align:middle;">
-                          <img src="https://api.iconify.design/fa6-solid/star.svg?color=%23ffffff&width=22&height=22" alt="Rate" width="22" height="22" style="display:block;margin:auto;border:0;" />
+                          <img src="https://wsrv.nl/?url=https://api.iconify.design/fa6-solid/star.svg%3Fcolor%3D%2523ffffff%26width%3D48%26height%3D48&output=png&w=22&h=22" alt="Rate" width="22" height="22" style="display:block;margin:auto;border:0;" />
                         </td>
                       </tr></table>
                       <p style="margin:14px 0 6px;color:#0a1628;font-size:15px;font-weight:800;text-transform:uppercase;line-height:1.2;font-family:Inter,'Helvetica Neue',Helvetica,Arial,sans-serif;">Rate Daily<br/>Meals</p>
@@ -225,7 +225,7 @@ export function buildWelcomeEmail(params: WelcomeEmailParams): string {
                     <td style="background:#ecfdf5;border:1px solid #a7f3d0;border-radius:14px;padding:24px 20px;">
                       <table role="presentation" cellpadding="0" cellspacing="0"><tr>
                         <td style="width:44px;height:44px;background:#34d399;border-radius:50%;text-align:center;vertical-align:middle;">
-                          <img src="https://api.iconify.design/fa6-solid/qrcode.svg?color=%23ffffff&width=22&height=22" alt="QR" width="22" height="22" style="display:block;margin:auto;border:0;" />
+                          <img src="https://wsrv.nl/?url=https://api.iconify.design/fa6-solid/qrcode.svg%3Fcolor%3D%2523ffffff%26width%3D48%26height%3D48&output=png&w=22&h=22" alt="QR" width="22" height="22" style="display:block;margin:auto;border:0;" />
                         </td>
                       </tr></table>
                       <p style="margin:14px 0 6px;color:#0a1628;font-size:15px;font-weight:800;text-transform:uppercase;line-height:1.2;font-family:Inter,'Helvetica Neue',Helvetica,Arial,sans-serif;">QR<br/>Check-in</p>
@@ -243,7 +243,7 @@ export function buildWelcomeEmail(params: WelcomeEmailParams): string {
                     <td style="background:#fdf2f8;border:1px solid #fbcfe8;border-radius:14px;padding:24px 20px;">
                       <table role="presentation" cellpadding="0" cellspacing="0"><tr>
                         <td style="width:44px;height:44px;background:#f472b6;border-radius:50%;text-align:center;vertical-align:middle;">
-                          <img src="https://api.iconify.design/fa6-solid/comment-dots.svg?color=%23ffffff&width=22&height=22" alt="Complaints" width="22" height="22" style="display:block;margin:auto;border:0;" />
+                          <img src="https://wsrv.nl/?url=https://api.iconify.design/fa6-solid/comment-dots.svg%3Fcolor%3D%2523ffffff%26width%3D48%26height%3D48&output=png&w=22&h=22" alt="Complaints" width="22" height="22" style="display:block;margin:auto;border:0;" />
                         </td>
                       </tr></table>
                       <p style="margin:14px 0 6px;color:#0a1628;font-size:15px;font-weight:800;text-transform:uppercase;line-height:1.2;font-family:Inter,'Helvetica Neue',Helvetica,Arial,sans-serif;">File<br/>Complaints</p>
@@ -259,7 +259,7 @@ export function buildWelcomeEmail(params: WelcomeEmailParams): string {
                     <td style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:14px;padding:24px 20px;">
                       <table role="presentation" cellpadding="0" cellspacing="0"><tr>
                         <td style="width:44px;height:44px;background:#60a5fa;border-radius:50%;text-align:center;vertical-align:middle;">
-                          <img src="https://api.iconify.design/fa6-solid/clock-rotate-left.svg?color=%23ffffff&width=22&height=22" alt="History" width="22" height="22" style="display:block;margin:auto;border:0;" />
+                          <img src="https://wsrv.nl/?url=https://api.iconify.design/fa6-solid/clock-rotate-left.svg%3Fcolor%3D%2523ffffff%26width%3D48%26height%3D48&output=png&w=22&h=22" alt="History" width="22" height="22" style="display:block;margin:auto;border:0;" />
                         </td>
                       </tr></table>
                       <p style="margin:14px 0 6px;color:#0a1628;font-size:15px;font-weight:800;text-transform:uppercase;line-height:1.2;font-family:Inter,'Helvetica Neue',Helvetica,Arial,sans-serif;">Track<br/>History</p>

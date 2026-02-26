@@ -78,6 +78,7 @@ export async function middleware(request: NextRequest) {
     '/api/auth/lookup',
     '/api/blocks',
     '/api/meal-timings',
+    '/api/health',
   ]
 
   const isPublicApi = publicPaths.some((p) => path.startsWith(p))
@@ -93,10 +94,20 @@ export async function middleware(request: NextRequest) {
     request: { headers: requestHeaders },
   })
 
-  // Helper: apply CSP + nonce header to any response
+  // Helper: apply CSP + all security headers to any response
   function withSecurityHeaders(response: NextResponse): NextResponse {
     response.headers.set('Content-Security-Policy', cspDirectives)
     response.headers.set('x-nonce', nonce)
+    // Defense-in-depth headers
+    response.headers.set('X-Content-Type-Options', 'nosniff')
+    response.headers.set('X-Frame-Options', 'DENY')
+    response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin')
+    // camera=(self) — required for QR scanner; matches next.config.js
+    response.headers.set('Permissions-Policy', 'camera=(self), microphone=(), geolocation=(), interest-cohort=()')
+    response.headers.set('X-DNS-Prefetch-Control', 'on')
+    if (isProd) {
+      response.headers.set('Strict-Transport-Security', 'max-age=63072000; includeSubDomains; preload')
+    }
     return response
   }
 
@@ -233,5 +244,7 @@ export const config = {
     '/api/reports/:path*',
     '/api/checkin/:path*',
     '/api/admin/checkin/:path*',
+    '/api/meal-timings/:path*',
+    '/api/health/:path*',
   ],
 }

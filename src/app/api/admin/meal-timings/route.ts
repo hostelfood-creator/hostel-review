@@ -19,7 +19,12 @@ function isValidTime(t: string): boolean {
 }
 
 /** GET — Fetch current meal timings (admin/super_admin only) */
-export async function GET() {
+export async function GET(request: Request) {
+  // Rate limit: 30 meal-timing reads per minute per IP
+  const ip = getClientIp(request)
+  const rl = checkRateLimit(`meal-timings-admin-get:${ip}`, 30, 60 * 1000)
+  if (!rl.allowed) return rateLimitResponse(rl.resetAt)
+
   try {
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()

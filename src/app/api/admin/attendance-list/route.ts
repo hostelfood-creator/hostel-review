@@ -55,9 +55,12 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url)
     const mode = searchParams.get('mode')
 
-    // Enforce admin's block scope
+    // Enforce admin's block scope — admins without an assigned block are rejected
     let hostelBlock: string | undefined
-    if (profile.role === 'admin' && profile.hostel_block) {
+    if (profile.role === 'admin') {
+      if (!profile.hostel_block) {
+        return NextResponse.json({ error: 'Your admin account has no hostel block assigned' }, { status: 403 })
+      }
       hostelBlock = profile.hostel_block
     } else if (searchParams.get('hostelBlock') && searchParams.get('hostelBlock') !== 'all') {
       hostelBlock = searchParams.get('hostelBlock')!
@@ -79,7 +82,12 @@ export async function GET(request: Request) {
     }
 
     // Default: detailed list for a single date
-    const date = searchParams.get('date') || getISTDate()
+    const rawDate = searchParams.get('date') || getISTDate()
+    // Validate date format to prevent malformed input
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(rawDate)) {
+      return NextResponse.json({ error: 'Invalid date format (expected YYYY-MM-DD)' }, { status: 400 })
+    }
+    const date = rawDate
     const mealType = searchParams.get('mealType') || undefined
 
     const result = await getAttendanceList(date, hostelBlock, mealType)

@@ -9,8 +9,23 @@ export function formatDate(date: Date): string {
   return date.toISOString().split('T')[0]
 }
 
+/**
+ * Get today's date in IST (Asia/Kolkata) as YYYY-MM-DD.
+ * SECURITY: Uses Intl API for timezone-safe date, preventing date mismatch
+ * bugs that could let students review/check-in under the wrong date near midnight.
+ */
 export function getTodayDate(): string {
-  return formatDate(new Date())
+  const now = new Date()
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Kolkata',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  })
+  const parts = Object.fromEntries(
+    formatter.formatToParts(now).map((p) => [p.type, p.value])
+  )
+  return `${parts.year}-${parts.month}-${parts.day}`
 }
 
 export function formatDisplayDate(dateStr: string): string {

@@ -4,6 +4,7 @@ import { cookies } from 'next/headers'
 import { checkRateLimitAsync, getClientIp, rateLimitResponse } from '@/lib/rate-limit'
 import { lookupStudent } from '@/lib/student-lookup'
 import { sendWelcomeEmail } from '@/lib/email'
+import { createServiceClient } from '@/lib/supabase/service'
 
 // ── Input validation helpers ──────────────────────────────
 function validateRegistrationInput(body: Record<string, unknown>) {
@@ -64,18 +65,8 @@ export async function POST(request: Request) {
     const verifiedYear = xlsxRecord?.year || (year ? String(year).trim().slice(0, 10) : null)
 
     // Duplicate email check — only one account per email address
-    const { createClient: createSupabaseAdmin } = await import('@supabase/supabase-js')
-    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-    const supabaseUrlForAdmin = process.env.NEXT_PUBLIC_SUPABASE_URL
-    if (!serviceRoleKey || !supabaseUrlForAdmin) {
-      console.error('CRITICAL: SUPABASE_SERVICE_ROLE_KEY or NEXT_PUBLIC_SUPABASE_URL is not set')
-      return NextResponse.json({ error: 'Server configuration error. Please contact admin.' }, { status: 500 })
-    }
-    const adminClient = createSupabaseAdmin(
-      supabaseUrlForAdmin,
-      serviceRoleKey,
-      { auth: { autoRefreshToken: false, persistSession: false } }
-    )
+    // Use shared service client (consistent with rest of codebase)
+    const adminClient = createServiceClient()
     const { data: existingEmail } = await adminClient
       .from('profiles')
       .select('id')

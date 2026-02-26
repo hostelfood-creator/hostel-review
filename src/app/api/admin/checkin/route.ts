@@ -47,7 +47,12 @@ export async function GET(request: Request) {
     }
 
     const { searchParams } = new URL(request.url)
-    const date = searchParams.get('date') || getISTDate()
+    const rawDate = searchParams.get('date') || getISTDate()
+    // Validate date format to prevent malformed input
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(rawDate)) {
+      return NextResponse.json({ error: 'Invalid date format (expected YYYY-MM-DD)' }, { status: 400 })
+    }
+    const date = rawDate
 
     // Admins see their block only; super_admins see all or can filter
     let hostelBlock: string | undefined

@@ -29,11 +29,36 @@ export async function GET(request: Request) {
         const { searchParams } = new URL(request.url)
         const rawWeeks = parseInt(searchParams.get('weeks') || '4')
         const weeks = Number.isFinite(rawWeeks) && rawWeeks > 0 ? Math.min(rawWeeks, 52) : 4
-        const hostelBlock = searchParams.get('hostelBlock') || (profile.role === 'admin' ? profile.hostel_block : undefined)
+
+        // Enforce block scope — admins without an assigned block are rejected
+        let hostelBlock: string | undefined
+        if (profile.role === 'admin') {
+            if (!profile.hostel_block) {
+                return NextResponse.json({ error: 'Your admin account has no hostel block assigned' }, { status: 403 })
+            }
+            hostelBlock = profile.hostel_block
+        } else {
+            hostelBlock = searchParams.get('hostelBlock') || undefined
+        }
 
         // Calculate date ranges for each week
         const now = new Date()
         const weeklyData = []
+
+        // Pre-fetch block users ONCE outside the loop (performance optimization)
+        // NOTE: Filtering reviews by current block membership is the standard pattern
+        // throughout the app (analytics, review listing) because the reviews table
+        // stores user_id, not hostel_block. A student who transfers blocks would have
+        // their historical reviews attributed to the new block. This is acceptable
+        // because hostel transfers are extremely rare in Indian university hostels.
+        let blockUserIds: string[] | null = null
+        if (hostelBlock) {
+            const { data: blockUsers } = await supabase
+                .from('profiles')
+                .select('id')
+                .eq('hostel_block', hostelBlock)
+            blockUserIds = (blockUsers || []).map((u: { id: string }) => u.id)
+        }
 
         for (let i = 0; i < weeks; i++) {
             const weekEnd = new Date(now)
@@ -50,15 +75,9 @@ export async function GET(request: Request) {
                 .gte('date', startStr)
                 .lte('date', endStr)
 
-            if (hostelBlock) {
-                // Get user IDs in this hostel block
-                const { data: blockUsers } = await supabase
-                    .from('profiles')
-                    .select('id')
-                    .eq('hostel_block', hostelBlock)
-                const userIds = (blockUsers || []).map((u: { id: string }) => u.id)
-                if (userIds.length > 0) {
-                    query = query.in('user_id', userIds)
+            if (blockUserIds !== null) {
+                if (blockUserIds.length > 0) {
+                    query = query.in('user_id', blockUserIds)
                 } else {
                     weeklyData.push({
                         weekLabel: `${startStr} to ${endStr}`,

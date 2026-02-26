@@ -3,8 +3,13 @@ import { createClient } from '@/lib/supabase/server'
 import { createServiceClient } from '@/lib/supabase/service'
 import { checkRateLimit, getClientIp, rateLimitResponse } from '@/lib/rate-limit'
 
-export async function GET() {
+export async function GET(request: Request) {
     try {
+        // Rate limit: 30 maintenance reads per minute per IP
+        const ip = getClientIp(request)
+        const rl = checkRateLimit(`maintenance-get:${ip}`, 30, 60 * 1000)
+        if (!rl.allowed) return rateLimitResponse(rl.resetAt)
+
         const supabase = await createClient()
 
         // Use Supabase session auth — not a custom cookie

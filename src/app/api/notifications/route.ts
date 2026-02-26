@@ -10,6 +10,21 @@ function sanitize(text: string | null | undefined, maxLen = 200): string {
     return text.replace(/<[^>]*>/g, '').trim().slice(0, maxLen)
 }
 
+/** Get today's date in IST as YYYY-MM-DD */
+function getISTToday(): string {
+    const now = new Date()
+    const formatter = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'Asia/Kolkata',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+    })
+    const parts = Object.fromEntries(
+        formatter.formatToParts(now).map((p) => [p.type, p.value])
+    )
+    return `${parts.year}-${parts.month}-${parts.day}`
+}
+
 export async function GET(request: Request) {
     try {
         // Rate limit: 30 notification requests per minute per IP
@@ -54,7 +69,7 @@ export async function GET(request: Request) {
                 notifications.push({
                     id: `welcome-${user.id}`,
                     type: 'welcome',
-                    title: `Welcome, ${firstName}! 🎉`,
+                    title: `Welcome, ${firstName}!`,
                     message: 'You\'re all set! Rate your meals, scan QR for check-in, and file complaints — your voice shapes the hostel experience.',
                     timestamp: profile.created_at,
                     read: false,
@@ -83,8 +98,8 @@ export async function GET(request: Request) {
                     })
                 })
 
-            // Check today's menu updates
-            const today = new Date().toISOString().split('T')[0]
+            // Check today's menu updates (IST-safe)
+            const today = getISTToday()
             const { data: todayMenus } = await supabase
                 .from('menus')
                 .select('meal_type, items')
@@ -129,8 +144,8 @@ export async function GET(request: Request) {
                 })
             }
 
-            // Check for low-rated reviews today
-            const today = new Date().toISOString().split('T')[0]
+            // Check for low-rated reviews today (IST-safe)
+            const today = getISTToday()
             const { data: lowReviews, count: lowCount } = await supabase
                 .from('reviews')
                 .select('id', { count: 'exact' })
@@ -148,8 +163,8 @@ export async function GET(request: Request) {
                 })
             }
 
-            // Meal attendance summary for today
-            const todayForCheckins = new Date().toISOString().split('T')[0]
+            // Meal attendance summary for today (IST-safe)
+            const todayForCheckins = getISTToday()
             let checkinQuery = supabase
                 .from('meal_checkins')
                 .select('meal_type')

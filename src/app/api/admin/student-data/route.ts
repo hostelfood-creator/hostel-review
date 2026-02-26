@@ -2,25 +2,96 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { checkRateLimit, getClientIp, rateLimitResponse } from '@/lib/rate-limit'
 import { invalidateStudentCache } from '@/lib/student-lookup'
-import path from 'path'
-import fs from 'fs'
+import { createServiceClient } from '@/lib/supabase/service'
+import * as XLSX from 'xlsx'
 
 /**
  * POST /api/admin/student-data — Upload a new student XLSX file
  * Only accessible by super_admin users.
  *
  * Accepts multipart/form-data with a single file field named "file".
- * The uploaded file replaces the existing "Students Details 2025-26.xlsx"
- * (or the path specified by STUDENT_XLSX_PATH env var) and invalidates
- * the in-memory lookup cache so subsequent lookups use the new data.
+ * Parses the XLSX in memory and upserts all student records into the
+ * `student_records` Supabase table. No filesystem writes — works on
+ * serverless platforms (Vercel).
  *
- * SECURITY: Only XLSX files under 10 MB are accepted. The file is
- * written atomically (write to temp, then rename) to prevent corruption.
+ * SECURITY: Only XLSX files under 10 MB are accepted.
  */
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10 MB
 const ALLOWED_EXTENSIONS = ['.xlsx', '.xls']
-const DEFAULT_XLSX_FILENAME = 'Students Details 2025-26.xlsx'
+
+/** Sheet name → database hostel block name mapping */
+const SHEET_TO_HOSTEL: Record<string, string> = {
+  VH: 'Visalakshi Hostel',
+  AH: 'Annapoorani Hostel',
+  MH: 'Sri Meenakshi Hostel',
+  KH: 'Sri Kamakshi Hostel',
+  SH: 'Sri Saraswathi Hostel',
+}
+
+interface StudentRow {
+  register_id: string
+  name: string
+  department: string | null
+  year: string | null
+  hostel_block: string
+  room_no: string | null
+}
+
+/** Parse XLSX buffer into deduplicated student rows */
+function parseXlsx(buffer: Buffer): StudentRow[] {
+  const workbook = XLSX.read(buffer, { type: 'buffer' })
+  const recordMap = new Map<string, StudentRow>()
+
+  for (const sheetName of workbook.SheetNames) {
+    const hostelBlock = SHEET_TO_HOSTEL[sheetName.trim().toUpperCase()]
+    if (!hostelBlock) continue
+
+    const sheet = workbook.Sheets[sheetName]
+    const rows: unknown[][] = XLSX.utils.sheet_to_json(sheet, { header: 1 })
+    if (rows.length === 0) continue
+
+    // Dynamic header detection
+    let headerRowIdx = -1
+    for (let i = 0; i < Math.min(rows.length, 5); i++) {
+      const row = rows[i]
+      if (!row || row.length < 3) continue
+      const cells = row.map(h => String(h ?? '').trim().toLowerCase())
+      if (cells.some(c => c.includes('reg') || c.includes('students name'))) {
+        headerRowIdx = i
+        break
+      }
+    }
+    if (headerRowIdx === -1) continue
+
+    const headerRow = (rows[headerRowIdx] || []).map(h => String(h ?? '').trim().toLowerCase())
+    const regIdx = headerRow.findIndex(h => h.includes('reg'))
+    const nameIdx = headerRow.findIndex(h => h.includes('students name') || h === 'name')
+    const deptIdx = headerRow.findIndex(h => h.includes('dept'))
+    const yearIdx = headerRow.findIndex(h => h === 'yr' || h === 'year')
+    const roomIdx = headerRow.findIndex(h => h.includes('room'))
+    if (regIdx === -1 || nameIdx === -1) continue
+
+    for (let i = headerRowIdx + 1; i < rows.length; i++) {
+      const row = rows[i]
+      if (!row || !row[regIdx]) continue
+      const regNo = String(row[regIdx]).trim().toUpperCase()
+      if (!regNo || regNo.length < 3) continue
+      if (!recordMap.has(regNo)) {
+        recordMap.set(regNo, {
+          register_id: regNo,
+          name: String(row[nameIdx] || '').trim(),
+          department: deptIdx >= 0 ? (String(row[deptIdx] || '').trim() || null) : null,
+          year: yearIdx >= 0 ? (String(row[yearIdx] || '').trim() || null) : null,
+          hostel_block: hostelBlock,
+          room_no: roomIdx >= 0 ? (String(row[roomIdx] || '').trim() || null) : null,
+        })
+      }
+    }
+  }
+
+  return Array.from(recordMap.values())
+}
 
 export async function POST(request: Request) {
   const ip = getClientIp(request)
@@ -54,8 +125,8 @@ export async function POST(request: Request) {
     }
 
     // 3. Validate file type and size
-    const ext = path.extname(file.name).toLowerCase()
-    if (!ALLOWED_EXTENSIONS.includes(ext)) {
+    const ext = '.' + file.name.split('.').pop()?.toLowerCase()
+    if (!ext || !ALLOWED_EXTENSIONS.includes(ext)) {
       return NextResponse.json(
         { error: `Invalid file type "${ext}". Only .xlsx and .xls files are accepted.` },
         { status: 400 }
@@ -73,35 +144,41 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Uploaded file is empty.' }, { status: 400 })
     }
 
-    // 4. Read file buffer
+    // 4. Parse XLSX in memory
     const arrayBuffer = await file.arrayBuffer()
     const buffer = Buffer.from(arrayBuffer)
+    const records = parseXlsx(buffer)
 
-    // 5. Determine target path
-    const envPath = process.env.STUDENT_XLSX_PATH
-    const targetPath = envPath
-      ? path.resolve(envPath)
-      : path.join(process.cwd(), DEFAULT_XLSX_FILENAME)
-
-    // 6. Atomic write — write to temp file, then rename to prevent corruption
-    const tempPath = targetPath + '.tmp.' + Date.now()
-    try {
-      fs.writeFileSync(tempPath, buffer)
-      fs.renameSync(tempPath, targetPath)
-    } catch (writeError) {
-      // Clean up temp file on failure
-      try { fs.unlinkSync(tempPath) } catch { /* ignore */ }
-      console.error('[StudentData] File write error:', writeError)
-      return NextResponse.json({ error: 'Failed to save file on server.' }, { status: 500 })
+    if (records.length === 0) {
+      return NextResponse.json(
+        { error: 'No valid student records found in the uploaded file. Check the sheet format.' },
+        { status: 400 }
+      )
     }
 
-    // 7. Invalidate the student lookup cache so new data is used immediately
+    // 5. Upsert into Supabase student_records table (batches of 500)
+    const adminClient = createServiceClient()
+    const BATCH_SIZE = 500
+    for (let i = 0; i < records.length; i += BATCH_SIZE) {
+      const batch = records.slice(i, i + BATCH_SIZE)
+      const { error: upsertError } = await adminClient
+        .from('student_records')
+        .upsert(batch, { onConflict: 'register_id' })
+
+      if (upsertError) {
+        console.error('[StudentData] Upsert error:', upsertError.message)
+        return NextResponse.json({ error: 'Failed to save student records.' }, { status: 500 })
+      }
+    }
+
+    // 6. Invalidate in-memory cache so subsequent lookups see new data
     invalidateStudentCache()
 
     return NextResponse.json({
-      message: 'Student data uploaded successfully. The lookup cache has been refreshed.',
+      message: `Student data uploaded successfully. ${records.length} records imported.`,
       filename: file.name,
       size: file.size,
+      recordCount: records.length,
     })
   } catch (error) {
     console.error('[StudentData] Upload error:', error)
@@ -110,8 +187,8 @@ export async function POST(request: Request) {
 }
 
 /**
- * GET /api/admin/student-data — Get info about current student data file
- * Returns file name, size, and last modified date.
+ * GET /api/admin/student-data — Get info about current student data
+ * Returns record counts grouped by hostel block.
  */
 export async function GET(request: Request) {
   const ip = getClientIp(request)
@@ -135,22 +212,19 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
-    const envPath = process.env.STUDENT_XLSX_PATH
-    const targetPath = envPath
-      ? path.resolve(envPath)
-      : path.join(process.cwd(), DEFAULT_XLSX_FILENAME)
+    const adminClient = createServiceClient()
+    const { count, error } = await adminClient
+      .from('student_records')
+      .select('id', { count: 'exact', head: true })
 
-    if (!fs.existsSync(targetPath)) {
-      return NextResponse.json({ exists: false, message: 'No student data file found.' })
+    if (error) {
+      return NextResponse.json({ error: 'Failed to query student records' }, { status: 500 })
     }
 
-    const stats = fs.statSync(targetPath)
     return NextResponse.json({
-      exists: true,
-      filename: path.basename(targetPath),
-      sizeBytes: stats.size,
-      sizeFormatted: `${(stats.size / 1024).toFixed(1)} KB`,
-      lastModified: stats.mtime.toISOString(),
+      exists: (count || 0) > 0,
+      totalRecords: count || 0,
+      message: count ? `${count} student records in database` : 'No student records found.',
     })
   } catch (error) {
     console.error('[StudentData] Info error:', error)

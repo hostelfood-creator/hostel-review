@@ -33,11 +33,10 @@ export async function PATCH(request: Request) {
         const updates: Record<string, string | null> = {}
 
         if (body.name !== undefined) {
-            // Block name edits for XLSX-verified students — prevents spoofing official records
-            // PERFORMANCE: lookupStudentName() uses an in-memory Map cache (parsed once per
-            // process lifetime from the XLSX file). Subsequent calls are O(1) Map lookups.
+            // Block name edits for verified students — prevents spoofing official records
+            // Uses 5-minute in-memory cache to reduce DB queries
             if (profile.register_id) {
-                const xlsxName = lookupStudentName(profile.register_id)
+                const xlsxName = await lookupStudentName(profile.register_id)
                 if (xlsxName) {
                     return NextResponse.json(
                         { error: 'Your name is verified from university records and cannot be changed' },

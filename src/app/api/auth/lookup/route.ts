@@ -4,16 +4,14 @@ import { lookupStudent } from '@/lib/student-lookup'
 
 /**
  * GET /api/auth/lookup?registerId=112451026
- * Returns student details (name, department, year, hostelBlock) from the master XLSX.
- * Used on the registration page to auto-fill fields when the student enters their Register ID.
+ * Returns student name from the `student_records` Supabase table.
+ * Used on the registration page to auto-fill name when the student enters their Register ID.
  *
- * SOURCE: "Students Details 2025-26.xlsx" — 5 sheets (VH, AH, MH, KH, SH), one per hostel.
- * Each sheet has: Sl.No, [Admission No], Reg.No, Students Name, Dept, Yr, [Room No].
- * The sheet name determines the hostel block.
+ * SOURCE: Seeded from "Students Details 2025-26.xlsx" — 5 hostel sheets (VH, AH, MH, KH, SH).
+ * Data lives in the `student_records` table (works on serverless platforms).
  *
- * SECURITY: Rate-limited to 6 lookups/min/IP. Full name is returned (needed for
- * registration auto-fill) but the user is already providing their own Register ID,
- * so the data returned corresponds to their own record.
+ * SECURITY: Rate-limited per IP (20/min) and per register ID (3/min).
+ * Only the student name is returned (no hostel/dept/year — prevents PII enumeration).
  */
 export async function GET(request: Request) {
   // Per-IP rate limit: 20 lookups/min — hostel students share WiFi (same public IP)
@@ -34,7 +32,7 @@ export async function GET(request: Request) {
   if (!idRl.allowed) return rateLimitResponse(idRl.resetAt)
 
   try {
-    const record = lookupStudent(registerId)
+    const record = await lookupStudent(registerId)
 
     // Uniform random delay on ALL responses to prevent timing side-channels
     // Both found and not-found take the same time range, preventing enumeration via timing

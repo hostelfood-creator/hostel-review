@@ -55,9 +55,9 @@ export async function POST(request: Request) {
     const { cleanId, cleanName, cleanEmail, cleanPass } = validation
     const { hostelBlock, department, year } = body
 
-    // Server-side XLSX verification — if the register ID is in university records,
+    // Server-side verification — if the register ID is in university records,
     // enforce the official name and auto-assign hostel/dept/year to prevent spoofing
-    const xlsxRecord = lookupStudent(cleanId)
+    const xlsxRecord = await lookupStudent(cleanId)
     const verifiedName = xlsxRecord?.name || cleanName
     // Prefer XLSX hostel/dept/year over client-provided values (authoritative source)
     const verifiedHostel = xlsxRecord?.hostelBlock || (hostelBlock ? String(hostelBlock).trim() : null)

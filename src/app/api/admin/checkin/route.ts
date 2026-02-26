@@ -51,7 +51,10 @@ export async function GET(request: Request) {
 
     // Admins see their block only; super_admins see all or can filter
     let hostelBlock: string | undefined
-    if (profile.role === 'admin' && profile.hostel_block) {
+    if (profile.role === 'admin') {
+      if (!profile.hostel_block) {
+        return NextResponse.json({ error: 'Your admin account has no hostel block assigned' }, { status: 403 })
+      }
       hostelBlock = profile.hostel_block
     } else if (searchParams.get('hostelBlock') && searchParams.get('hostelBlock') !== 'all') {
       hostelBlock = searchParams.get('hostelBlock')!

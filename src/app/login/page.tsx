@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { faEye, faEyeSlash } from '@fortawesome/free-solid-svg-icons'
@@ -15,6 +15,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { OtpInput } from '@/components/ui/otp-input'
+import { motion } from 'framer-motion'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -29,6 +30,7 @@ export default function LoginPage() {
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
   const [nameLocked, setNameLocked] = useState(false)
   const [fieldsLocked, setFieldsLocked] = useState(false)
+  const [emailLocked, setEmailLocked] = useState(false)
   const [lookingUpName, setLookingUpName] = useState(false)
   const lookupTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -51,7 +53,8 @@ export default function LoginPage() {
     if (trimmed.length < 3) {
       setNameLocked(false)
       setFieldsLocked(false)
-      setForm(prev => ({ ...prev, name: '' }))
+      setEmailLocked(false)
+      setForm(prev => ({ ...prev, name: '', email: '' }))
       return
     }
     setLookingUpName(true)
@@ -59,19 +62,23 @@ export default function LoginPage() {
       const res = await fetch(`/api/auth/lookup?registerId=${encodeURIComponent(trimmed)}`)
       const data = await res.json()
       if (data.found) {
+        const autoEmail = `${trimmed.toLowerCase()}@kanchiuniv.ac.in`
         setForm(prev => ({
           ...prev,
           name: data.name,
+          email: autoEmail,
           ...(data.hostelBlock ? { hostelBlock: data.hostelBlock } : {}),
           ...(data.department ? { department: data.department } : {}),
           ...(data.year ? { year: data.year } : {}),
         }))
         setNameLocked(true)
         setFieldsLocked(true)
+        setEmailLocked(true)
         // Clear errors for auto-filled fields
         setFieldErrors(prev => {
           const n = { ...prev }
           delete n.name
+          delete n.email
           if (data.hostelBlock) delete n.hostelBlock
           if (data.year) delete n.year
           return n
@@ -79,11 +86,13 @@ export default function LoginPage() {
       } else {
         setNameLocked(false)
         setFieldsLocked(false)
-        setForm(prev => ({ ...prev, name: '' }))
+        setEmailLocked(false)
+        setForm(prev => ({ ...prev, name: '', email: '' }))
       }
     } catch {
       setNameLocked(false)
       setFieldsLocked(false)
+      setEmailLocked(false)
     } finally {
       setLookingUpName(false)
     }
@@ -259,14 +268,74 @@ export default function LoginPage() {
     }
   }
 
+  // Password strength calculation for registration
+  const getPasswordStrength = (pw: string): { level: number; label: string; color: string } => {
+    if (!pw) return { level: 0, label: '', color: '' }
+    let score = 0
+    if (pw.length >= 8) score++
+    if (pw.length >= 12) score++
+    if (/[A-Z]/.test(pw) && /[a-z]/.test(pw)) score++
+    if (/\d/.test(pw)) score++
+    if (/[^A-Za-z0-9]/.test(pw)) score++
+
+    if (score <= 1) return { level: 1, label: 'Weak', color: 'bg-red-500' }
+    if (score <= 2) return { level: 2, label: 'Fair', color: 'bg-orange-500' }
+    if (score <= 3) return { level: 3, label: 'Medium', color: 'bg-yellow-500' }
+    if (score <= 4) return { level: 4, label: 'Strong', color: 'bg-emerald-500' }
+    return { level: 5, label: 'Very Strong', color: 'bg-emerald-600' }
+  }
+
+  const passwordStrength = getPasswordStrength(form.password)
+
+  // Generate stable particle configs once (avoids re-randomising on every render)
+  const particles = useMemo(() => {
+    const seed = 42 // deterministic pseudo-random for SSR/client consistency
+    const mulberry32 = (s: number) => () => { s |= 0; s = (s + 0x6d2b79f5) | 0; let t = Math.imul(s ^ (s >>> 15), 1 | s); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296 }
+    const rand = mulberry32(seed)
+    return Array.from({ length: 18 }, (_, i) => ({
+      id: i,
+      x: rand() * 100,           // % from left
+      y: rand() * 100,           // % from top
+      size: 4 + rand() * 10,     // px
+      duration: 12 + rand() * 20, // seconds
+      delay: rand() * -20,       // negative = already mid-animation on mount
+      dx: (rand() - 0.5) * 30,   // horizontal drift range (%)
+      dy: (rand() - 0.5) * 30,   // vertical drift range (%)
+      opacity: 0.10 + rand() * 0.18,
+    }))
+  }, [])
+
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-4 transition-colors">
+    <div className="min-h-screen bg-background flex items-center justify-center p-4 transition-colors relative overflow-hidden">
+      {/* Parallax floating particles */}
+      <div aria-hidden className="pointer-events-none fixed inset-0 z-0 overflow-hidden">
+        {particles.map((p) => (
+          <motion.div
+            key={p.id}
+            className="absolute rounded-full bg-primary/20 dark:bg-primary/15"
+            style={{ left: `${p.x}%`, top: `${p.y}%`, width: p.size, height: p.size }}
+            animate={{
+              x: [0, p.dx, -p.dx * 0.6, 0],
+              y: [0, p.dy, -p.dy * 0.8, 0],
+              scale: [1, 1.3, 0.85, 1],
+              opacity: [p.opacity, p.opacity * 1.5, p.opacity * 0.6, p.opacity],
+            }}
+            transition={{
+              duration: p.duration,
+              repeat: Infinity,
+              ease: 'easeInOut',
+              delay: p.delay,
+            }}
+          />
+        ))}
+      </div>
+
       {/* Theme Toggle */}
       <div className="fixed top-4 right-4 z-50">
         <ThemeToggle />
       </div>
 
-      <div className="w-full max-w-md lg:max-w-lg">
+      <div className="w-full max-w-md lg:max-w-lg relative z-10">
         {/* Logo / Header */}
         <BlurFade delay={0.1} inView>
           <div className="text-center mb-10">
@@ -456,10 +525,14 @@ export default function LoginPage() {
                           type="email"
                           required
                           value={form.email}
-                          onChange={(e) => updateForm('email', e.target.value)}
+                          onChange={(e) => { if (!emailLocked) updateForm('email', e.target.value) }}
+                          readOnly={emailLocked}
                           placeholder="Enter your College Email"
-                          className={`h-11 text-base ${fieldErrors.email ? 'border-destructive focus-visible:ring-destructive' : ''}`}
+                          className={`h-11 text-base ${emailLocked ? 'bg-muted cursor-not-allowed' : ''} ${fieldErrors.email ? 'border-destructive focus-visible:ring-destructive' : ''}`}
                         />
+                        {emailLocked && (
+                          <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-1">Email auto-filled from Register ID</p>
+                        )}
                         {fieldErrors.email && (
                           <p className="text-xs text-destructive mt-1">{fieldErrors.email}</p>
                         )}
@@ -495,10 +568,9 @@ export default function LoginPage() {
                           </Label>
                           <Select
                             value={form.year}
-                            onValueChange={(v) => { if (!fieldsLocked) updateForm('year', v) }}
-                            disabled={fieldsLocked}
+                            onValueChange={(v) => updateForm('year', v)}
                           >
-                            <SelectTrigger className={`h-11 ${fieldsLocked ? 'bg-muted cursor-not-allowed' : ''} ${fieldErrors.year ? 'border-destructive' : ''}`}>
+                            <SelectTrigger className={`h-11 ${fieldErrors.year ? 'border-destructive' : ''}`}>
                               <SelectValue placeholder="Select" />
                             </SelectTrigger>
                             <SelectContent>
@@ -506,6 +578,7 @@ export default function LoginPage() {
                               <SelectItem value="2nd">2nd Year</SelectItem>
                               <SelectItem value="3rd">3rd Year</SelectItem>
                               <SelectItem value="4th">4th Year</SelectItem>
+                              <SelectItem value="5th">5th Year</SelectItem>
                             </SelectContent>
                           </Select>
                           {fieldErrors.year && (
@@ -557,6 +630,30 @@ export default function LoginPage() {
                           <FontAwesomeIcon icon={showPassword ? faEyeSlash : faEye} className="w-4 h-4" />
                         </button>
                       </div>
+                      {/* Password Strength Indicator — only shown during registration */}
+                      {isRegister && form.password.length > 0 && (
+                        <div className="space-y-1 mt-1.5">
+                          <div className="flex gap-1">
+                            {[1, 2, 3, 4, 5].map((i) => (
+                              <div
+                                key={i}
+                                className={`h-1.5 flex-1 rounded-full transition-colors duration-200 ${
+                                  i <= passwordStrength.level ? passwordStrength.color : 'bg-muted'
+                                }`}
+                              />
+                            ))}
+                          </div>
+                          <p className={`text-xs font-medium ${
+                            passwordStrength.level <= 1 ? 'text-red-500' :
+                            passwordStrength.level <= 2 ? 'text-orange-500' :
+                            passwordStrength.level <= 3 ? 'text-yellow-600 dark:text-yellow-400' :
+                            'text-emerald-500'
+                          }`}>
+                            {passwordStrength.label}
+                            {passwordStrength.level <= 2 && ' — use 8+ chars, uppercase, numbers & symbols'}
+                          </p>
+                        </div>
+                      )}
                       <div className="flex justify-between items-center mt-1">
                         {fieldErrors.password ? (
                           <p className="text-xs text-destructive">{fieldErrors.password}</p>
@@ -621,6 +718,7 @@ export default function LoginPage() {
                       setIsRegister(!isRegister)
                       setNameLocked(false)
                       setFieldsLocked(false)
+                      setEmailLocked(false)
                       setLookingUpName(false)
                       setError('')
                       setFieldErrors({})
@@ -635,6 +733,20 @@ export default function LoginPage() {
               </div>
             </CardContent>
           </Card>
+        </BlurFade>
+
+        {/* Social proof counter */}
+        <BlurFade delay={0.4} inView>
+          <p className="text-center text-muted-foreground text-sm mt-6 select-none">
+            <motion.span
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.8, duration: 0.5 }}
+              className="inline-block"
+            >
+              🎓 <span className="font-semibold text-foreground">1,100+</span> students already registered
+            </motion.span>
+          </p>
         </BlurFade>
       </div>
     </div>

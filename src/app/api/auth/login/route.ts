@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { checkRateLimitAsync, getClientIp, rateLimitResponse } from '@/lib/rate-limit'
+import { createServiceClient } from '@/lib/supabase/service'
 
 export async function POST(request: Request) {
   // Rate limit: 10 attempts per 15 minutes per IP (Redis-backed in production)
@@ -51,15 +52,61 @@ export async function POST(request: Request) {
       }
     )
 
-    const syntheticEmail = `${cleanId.toLowerCase()}@hostel.local`
+    // Resolve registerId → real email via profiles table (service client to bypass RLS)
+    const adminClient = createServiceClient()
+    const { data: profileLookup } = await adminClient
+      .from('profiles')
+      .select('id, email')
+      .ilike('register_id', cleanId)
+      .maybeSingle()
 
+    // Resolve the definitive email from auth.users using the profile ID.
+    // This avoids double signInWithPassword calls (each triggers expensive bcrypt)
+    // by discovering the correct email up-front via a cheap admin lookup.
+    let authEmail: string
+    if (profileLookup?.id) {
+      const { data: authUserData } = await adminClient.auth.admin.getUserById(profileLookup.id)
+      const currentAuthEmail = authUserData?.user?.email
+
+      // If auth still has legacy @hostel.local but profile has real email, migrate first
+      if (currentAuthEmail?.endsWith('@hostel.local') && profileLookup.email && !profileLookup.email.endsWith('@hostel.local')) {
+        try {
+          await adminClient.auth.admin.updateUserById(profileLookup.id, {
+            email: profileLookup.email,
+            email_confirm: true,
+          })
+          authEmail = profileLookup.email
+          console.log('[Login] Migrated auth email from @hostel.local for user', profileLookup.id)
+        } catch (migrateErr) {
+          // Migration failed — use current auth email to still let user log in
+          console.error('[Login] Pre-login email migration failed (non-fatal) for user', profileLookup.id)
+          authEmail = currentAuthEmail || profileLookup.email || `${cleanId.toLowerCase()}@hostel.local`
+        }
+      } else {
+        authEmail = currentAuthEmail || profileLookup.email || `${cleanId.toLowerCase()}@hostel.local`
+      }
+
+      // Auto-confirm unconfirmed accounts (by design — identity validated via university XLSX records)
+      if (authUserData?.user && !authUserData.user.email_confirmed_at) {
+        try {
+          await adminClient.auth.admin.updateUserById(profileLookup.id, { email_confirm: true })
+        } catch {
+          // Non-fatal — signIn will still be attempted
+        }
+      }
+    } else {
+      // No profile found — try legacy synthetic email
+      authEmail = `${cleanId.toLowerCase()}@hostel.local`
+    }
+
+    // Single authentication attempt with the resolved email
     const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-      email: syntheticEmail,
+      email: authEmail,
       password: cleanPass,
     })
 
     if (authError || !authData.user) {
-      // Generic error — don't reveal whether ID exists or password is wrong
+      console.error('[Login] signInWithPassword failed:', authError?.message, authError?.status)
       return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 })
     }
 

@@ -10,22 +10,31 @@ import { lookupStudent } from '@/lib/student-lookup'
  * SOURCE: "Students Details 2025-26.xlsx" — 5 sheets (VH, AH, MH, KH, SH), one per hostel.
  * Each sheet has: Sl.No, [Admission No], Reg.No, Students Name, Dept, Yr, [Room No].
  * The sheet name determines the hostel block.
+ *
+ * SECURITY: Rate-limited to 6 lookups/min/IP. Full name is returned (needed for
+ * registration auto-fill) but the user is already providing their own Register ID,
+ * so the data returned corresponds to their own record.
  */
 export async function GET(request: Request) {
-  // Rate limit: 10 lookups per minute per IP to prevent enumeration
+  // Strict rate limit: 6 lookups per minute per IP to prevent bulk enumeration
   const ip = getClientIp(request)
-  const rl = checkRateLimit(`lookup:${ip}`, 10, 60 * 1000)
+  const rl = checkRateLimit(`lookup:${ip}`, 6, 60 * 1000)
   if (!rl.allowed) return rateLimitResponse(rl.resetAt)
 
   const { searchParams } = new URL(request.url)
   const registerId = searchParams.get('registerId')?.trim().toUpperCase()
 
-  if (!registerId || registerId.length < 2) {
+  if (!registerId || registerId.length < 5) {
     return NextResponse.json({ found: false }, { status: 200 })
   }
 
   try {
     const record = lookupStudent(registerId)
+
+    // Uniform random delay on ALL responses to prevent timing side-channels
+    // Both found and not-found take the same time range, preventing enumeration via timing
+    const jitter = 100 + Math.random() * 200
+    await new Promise(r => setTimeout(r, jitter))
 
     if (record) {
       return NextResponse.json({

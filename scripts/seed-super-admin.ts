@@ -35,7 +35,7 @@ async function seedSuperAdmin() {
     if (password.length < 10) {
         throw new Error('SUPER_ADMIN_PASSWORD must be at least 10 characters for security.')
     }
-    const syntheticEmail = `${registerId.toLowerCase()}@hostel.local`
+    const authEmail = `${registerId.toLowerCase()}@kanchiuniv.ac.in`
 
     // Check if already exists
     const { data: existing } = await supabase
@@ -56,7 +56,7 @@ async function seedSuperAdmin() {
     }
 
     const { data: authData, error: authError } = await supabase.auth.signUp({
-        email: syntheticEmail,
+        email: authEmail,
         password,
     })
 
@@ -66,7 +66,7 @@ async function seedSuperAdmin() {
         // If user exists in auth but not profiles, try to sign in and create profile
         if (authError.message.includes('already registered')) {
             const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
-                email: syntheticEmail,
+                email: authEmail,
                 password,
             })
             if (signInError) {

@@ -47,14 +47,19 @@ export async function middleware(request: NextRequest) {
   ].join('; ')
 
   // ── CSRF Protection: Origin validation for state-changing requests ──
+  // Uses Origin header first, Referer as fallback. If neither is present,
+  // the request is still allowed: same-origin requests in some browsers
+  // may omit both, and Supabase SameSite=Lax cookies provide an extra layer.
   const method = request.method
   if (['POST', 'PATCH', 'PUT', 'DELETE'].includes(method)) {
     const origin = request.headers.get('origin')
+    const referer = request.headers.get('referer')
     const host = request.headers.get('host')
-    if (origin && host) {
+    const sourceUrl = origin || referer
+    if (sourceUrl && host) {
       try {
-        const originHost = new URL(origin).host
-        if (originHost !== host) {
+        const sourceHost = new URL(sourceUrl).host
+        if (sourceHost !== host) {
           return NextResponse.json({ error: 'Forbidden — origin mismatch' }, { status: 403 })
         }
       } catch {

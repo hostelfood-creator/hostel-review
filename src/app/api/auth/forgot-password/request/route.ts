@@ -1,29 +1,8 @@
 import { NextResponse } from 'next/server'
 import { createClient as createSupabaseAdmin } from '@supabase/supabase-js'
-import nodemailer from 'nodemailer'
 import crypto from 'crypto'
 import { checkRateLimitAsync, getClientIp, rateLimitResponse } from '@/lib/rate-limit'
-
-// Reuse SMTP transporter across requests (connection pooling)
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let cachedTransporter: nodemailer.Transporter | null = null
-function getTransporter() {
-  if (!cachedTransporter) {
-    const smtpSecure = process.env.SMTP_SECURE === 'true'
-    cachedTransporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST || 'smtp.gmail.com',
-      port: Number(process.env.SMTP_PORT) || 587,
-      secure: smtpSecure,
-      auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS,
-      },
-      pool: true,    // Enable connection pooling
-      maxConnections: 3,
-    })
-  }
-  return cachedTransporter
-}
+import { getTransporter, getSender } from '@/lib/email'
 
 // Fully responsive institutional email — works on Gmail, Outlook, Apple Mail, and mobile
 function buildOtpEmail(name: string, registerId: string, otp: string): string {
@@ -244,20 +223,27 @@ export async function POST(request: Request) {
     const registerId = profile?.register_id
 
     if (!profile || !registerId) {
-      // Return same success message to prevent user enumeration attacks
       return NextResponse.json(
-        { message: 'If an account with that identifier exists, an OTP has been sent to the associated email.' }
+        { error: 'No account found with that email address. Please check your email or register first.' },
+        { status: 404 }
       )
     }
 
     if (!profile.email) {
-      // Return same success message to prevent user enumeration attacks
-      return NextResponse.json({ message: 'If an account with that identifier exists, an OTP has been sent to the associated email.' })
+      return NextResponse.json(
+        { error: 'No email address is linked to this account. Please contact the hostel admin.' },
+        { status: 400 }
+      )
     }
 
     // 3. Generate 6-digit OTP (higher entropy — 1M combinations vs 10K for 4-digit)
     const otp = crypto.randomInt(100000, 1000000).toString()
     const expiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString()
+
+    // Hash the OTP before storing — prevents plaintext exposure if the DB is compromised.
+    // SHA-256 is appropriate here: OTPs are short-lived (5 min), rate-limited (3/15 min),
+    // and 6-digit (1M combinations). Bcrypt/Argon2 would add unnecessary latency.
+    const otpHash = crypto.createHash('sha256').update(otp).digest('hex')
 
     // 4. Invalidate any existing OTPs for this user first
     await supabaseAdmin.from('password_resets').delete().eq('register_id', registerId)
@@ -265,7 +251,7 @@ export async function POST(request: Request) {
     const { error: insertError } = await supabaseAdmin.from('password_resets').insert({
       register_id: registerId,
       email: profile.email,
-      otp,
+      otp: otpHash,
       expires_at: expiresAt,
     })
 
@@ -276,12 +262,10 @@ export async function POST(request: Request) {
 
     // 5. Send professional HTML email via SMTP (reused transporter with connection pooling)
     const transporter = getTransporter()
-
-    const fromName = process.env.SMTP_FROM_NAME || 'SCSVMV Hostel Review'
-    const fromEmail = process.env.SMTP_FROM_EMAIL || process.env.SMTP_USER || 'no-reply@hostel.local'
+    const sender = getSender()
 
     await transporter.sendMail({
-      from: `"${fromName}" <${fromEmail}>`,
+      from: `"${sender.name}" <${sender.email}>`,
       to: profile.email,
       subject: 'Password Reset — SCSVMV Hostel Review',
       html: buildOtpEmail(profile.name, registerId, otp),

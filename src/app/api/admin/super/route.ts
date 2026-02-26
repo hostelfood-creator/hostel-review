@@ -172,18 +172,22 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Register ID must be alphanumeric' }, { status: 400 })
         }
 
-        // Validate role — only allow admin or super_admin
+        // Validate role — only allow admin or super_admin; reject anything else explicitly
         const allowedRoles = ['admin', 'super_admin']
-        const targetRole = allowedRoles.includes(newRole) ? newRole : 'admin'
+        if (!newRole || !allowedRoles.includes(newRole)) {
+            return NextResponse.json({ error: 'Role must be "admin" or "super_admin"' }, { status: 400 })
+        }
+        const targetRole = newRole
 
-        const syntheticEmail = `${trimmedRegisterId.toLowerCase()}@hostel.local`
+        // Use registerId@kanchiuniv.ac.in as the auth email so that auth.users
+        // always has a real-looking, consistent email (no synthetic @hostel.local).
+        const authEmail = `${trimmedRegisterId.toLowerCase()}@kanchiuniv.ac.in`
 
         // Use service role client to create auth user.
-        // email_confirm: true auto-verifies the email (skips confirmation step)
-        // since admin-created users use synthetic emails, not real ones.
+        // email_confirm: true auto-verifies the email (skips confirmation step).
         const serviceDb = createServiceClient()
         const { data: authData, error: authError } = await serviceDb.auth.admin.createUser({
-            email: syntheticEmail,
+            email: authEmail,
             password,
             email_confirm: true,
         })
@@ -204,6 +208,7 @@ export async function POST(request: Request) {
             id: authData.user.id,
             register_id: trimmedRegisterId.toUpperCase(),
             name: trimmedName,
+            email: authEmail,
             role: targetRole,
             hostel_block: (targetRole === 'admin' && hostelBlock) ? String(hostelBlock).trim() : null,
         })
@@ -241,24 +246,17 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Target user is not an admin' }, { status: 400 })
         }
 
-        // Delete profile row
-        const { error } = await supabase
-            .from('profiles')
-            .delete()
-            .eq('id', id)
-
-        if (error) {
-            console.error('Admin deletion error:', error.message)
-            return NextResponse.json({ error: 'Failed to remove admin' }, { status: 500 })
-        }
-
-        // Also delete the auth user so they can't log in anymore
+        // Delete the auth user — FK CASCADE (profiles.id → auth.users.id ON DELETE CASCADE)
+        // automatically removes the profile row and all dependent records.
         const serviceDb = createServiceClient()
         const { error: authDeleteError } = await serviceDb.auth.admin.deleteUser(id)
         if (authDeleteError) {
-            console.error('Failed to delete auth user during admin removal:', authDeleteError.message)
-            // Profile is already deleted — log but don't fail the request
+            console.error('Admin deletion error:', authDeleteError.message)
+            return NextResponse.json({ error: 'Failed to remove admin' }, { status: 500 })
         }
+
+        // Defensive cleanup: ensure profile is gone (guards against misconfigured CASCADE)
+        await serviceDb.from('profiles').delete().eq('id', id)
 
         return NextResponse.json({ success: true })
     }

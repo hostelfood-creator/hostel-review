@@ -50,12 +50,7 @@ const MEAL_LABELS: Record<string, string> = {
   dinner: 'Dinner',
 }
 
-const MEAL_EMOJIS: Record<string, string> = {
-  breakfast: '🌅',
-  lunch: '☀️',
-  snacks: '🍪',
-  dinner: '🌙',
-}
+// Emojis removed per admin request — clean text labels only
 
 /** Format "2025-02-26" to "Feb 26" */
 function shortDate(dateStr: string): string {
@@ -418,7 +413,6 @@ export default function AttendanceListPage() {
             <Card key={m} className="rounded-xl">
               <CardContent className="p-3">
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-lg">{MEAL_EMOJIS[m]}</span>
                   <span className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">{MEAL_LABELS[m]}</span>
                 </div>
                 <div className="flex items-end justify-between">
@@ -550,7 +544,7 @@ export default function AttendanceListPage() {
                       <th className="text-left px-4 py-3 text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">Hostel</th>
                       {meals.map(m => (
                         <th key={m} className="text-center px-3 py-3 text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">
-                          {MEAL_EMOJIS[m]} {MEAL_LABELS[m]}
+                          {MEAL_LABELS[m]}
                         </th>
                       ))}
                     </tr>

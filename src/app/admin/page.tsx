@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { faMessage, faStar, faUsers, faBell, faTriangleExclamation, faScrewdriverWrench, faUtensils, faQrcode } from '@fortawesome/free-solid-svg-icons'
+import { faMessage, faStar, faUsers, faBell, faTriangleExclamation, faScrewdriverWrench, faUtensils, faQrcode, faFileUpload } from '@fortawesome/free-solid-svg-icons'
 import {
   LineChart,
   Line,
@@ -80,6 +80,8 @@ export default function AdminDashboard() {
     byBlock: Record<string, Record<string, number>>;
   } | null>(null)
   const [attendanceLoading, setAttendanceLoading] = useState(true)
+  const [uploadingFile, setUploadingFile] = useState(false)
+  const [studentFileInfo, setStudentFileInfo] = useState<{ exists: boolean; filename?: string; sizeFormatted?: string; lastModified?: string } | null>(null)
 
   const loadData = useCallback(async () => {
     setLoading(true)
@@ -199,6 +201,59 @@ export default function AdminDashboard() {
       toast.error('Network error')
     } finally {
       setTogglingMaintenance(false)
+    }
+  }
+
+  // Fetch student data file info for super admins
+  const fetchStudentFileInfo = useCallback(async () => {
+    try {
+      const res = await fetch('/api/admin/student-data')
+      if (res.ok) {
+        const info = await res.json()
+        setStudentFileInfo(info)
+      }
+    } catch { /* ignore */ }
+  }, [])
+
+  useEffect(() => {
+    if (data?.userRole === 'super_admin') {
+      fetchStudentFileInfo()
+    }
+  }, [data?.userRole, fetchStudentFileInfo])
+
+  const handleUploadStudentData = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    e.target.value = '' // Reset input so same file can be re-uploaded
+
+    const ext = file.name.split('.').pop()?.toLowerCase()
+    if (!['xlsx', 'xls'].includes(ext || '')) {
+      toast.error('Only .xlsx and .xls files are accepted')
+      return
+    }
+
+    setUploadingFile(true)
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+
+      const res = await fetch('/api/admin/student-data', {
+        method: 'POST',
+        body: formData,
+      })
+      const data = await res.json()
+
+      if (!res.ok) {
+        toast.error(data.error || 'Upload failed')
+        return
+      }
+
+      toast.success(data.message || 'Student data uploaded successfully')
+      fetchStudentFileInfo()
+    } catch {
+      toast.error('Network error — please try again')
+    } finally {
+      setUploadingFile(false)
     }
   }
 
@@ -399,16 +454,15 @@ export default function AdminDashboard() {
             <>
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
                 {[
-                  { meal: 'Breakfast', key: 'breakfast', emoji: '🌅' },
-                  { meal: 'Lunch', key: 'lunch', emoji: '☀️' },
-                  { meal: 'Snacks', key: 'snacks', emoji: '🍪' },
-                  { meal: 'Dinner', key: 'dinner', emoji: '🌙' },
+                  { meal: 'Breakfast', key: 'breakfast' },
+                  { meal: 'Lunch', key: 'lunch' },
+                  { meal: 'Snacks', key: 'snacks' },
+                  { meal: 'Dinner', key: 'dinner' },
                 ].map((item) => (
                   <div
                     key={item.key}
                     className="flex flex-col items-center justify-center p-4 rounded-xl bg-muted/50 border"
                   >
-                    <span className="text-2xl mb-1">{item.emoji}</span>
                     <p className="text-2xl font-bold text-foreground">
                       {attendance[item.key as keyof typeof attendance] as number}
                     </p>
@@ -562,6 +616,56 @@ export default function AdminDashboard() {
                   ))}
                 </tbody>
               </table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Student Data Upload — Super Admin only */}
+      {data.userRole === 'super_admin' && (
+        <Card className="rounded-xl mb-6">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-semibold flex items-center gap-2">
+              <FontAwesomeIcon icon={faFileUpload} className="w-3.5 h-3.5 text-primary" />
+              Student Lookup Data
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+              <div className="flex-1">
+                {studentFileInfo?.exists ? (
+                  <p className="text-xs text-muted-foreground">
+                    Current file: <span className="font-medium text-foreground">{studentFileInfo.filename}</span>
+                    {' '}({studentFileInfo.sizeFormatted})
+                    {studentFileInfo.lastModified && (
+                      <> &mdash; updated {new Date(studentFileInfo.lastModified).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</>
+                    )}
+                  </p>
+                ) : (
+                  <p className="text-xs text-muted-foreground">No student data file found. Upload an XLSX to enable auto-fill during registration.</p>
+                )}
+              </div>
+              <label className="shrink-0">
+                <input
+                  type="file"
+                  accept=".xlsx,.xls"
+                  className="hidden"
+                  onChange={handleUploadStudentData}
+                  disabled={uploadingFile}
+                />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={uploadingFile}
+                  className="cursor-pointer"
+                  asChild
+                >
+                  <span>
+                    <FontAwesomeIcon icon={faFileUpload} className="w-3 h-3 mr-1.5" />
+                    {uploadingFile ? 'Uploading...' : 'Upload New XLSX'}
+                  </span>
+                </Button>
+              </label>
             </div>
           </CardContent>
         </Card>

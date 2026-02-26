@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import crypto from 'crypto'
 import { checkRateLimitAsync, getClientIp, rateLimitResponse } from '@/lib/rate-limit'
 
 export async function POST(request: Request) {
@@ -59,7 +60,10 @@ export async function POST(request: Request) {
         )
 
         // 2. Look up the password_resets record by email or register_id
-        let resetQuery = supabaseAdmin.from('password_resets').select('*').eq('otp', otp)
+        //    OTPs are stored as SHA-256 hashes — hash the user input before querying.
+        const otpHash = crypto.createHash('sha256').update(otp).digest('hex')
+
+        let resetQuery = supabaseAdmin.from('password_resets').select('*').eq('otp', otpHash)
         if (isEmailLookup) {
             resetQuery = resetQuery.eq('email', lookupEmail!)
         } else {
@@ -116,14 +120,13 @@ export async function POST(request: Request) {
 
         // 5. Force update the user's password in Supabase Auth
         //    This updates the auth.users table which is used by signInWithPassword()
-        //    email_confirm: true preserves the user's confirmed status so login works after reset.
-        //    Only set if the user was already confirmed (prevents bypassing email verification).
-        const { data: existingUser } = await supabaseAdmin.auth.admin.getUserById(profile.id)
-        const wasConfirmed = !!existingUser?.user?.email_confirmed_at
-
+        //    email_confirm: true is always set because all users in this system are
+        //    pre-verified via university XLSX records — there is no separate email
+        //    verification step. Without this flag, Supabase may unconfirm the email
+        //    during the password update, locking the user out.
         const { data: updateData, error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
             profile.id,
-            { password: newPassword, ...(wasConfirmed ? { email_confirm: true } : {}) }
+            { password: newPassword, email_confirm: true }
         )
 
         if (updateError) {

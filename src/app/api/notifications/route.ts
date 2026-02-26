@@ -2,7 +2,9 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { checkRateLimit, getClientIp, rateLimitResponse } from '@/lib/rate-limit'
 
-/** Strip HTML tags and limit length to prevent XSS / injection via stored content */
+/** Strip HTML tags and limit length — defense-in-depth layer for stored content.
+ *  NOTE: This is NOT a full XSS sanitizer. React auto-escapes on render;
+ *  this only strips obvious tags to keep notification text clean. */
 function sanitize(text: string | null | undefined, maxLen = 200): string {
     if (!text) return ''
     return text.replace(/<[^>]*>/g, '').trim().slice(0, maxLen)
@@ -24,7 +26,7 @@ export async function GET(request: Request) {
 
         const { data: profile } = await supabase
             .from('profiles')
-            .select('role, hostel_block')
+            .select('role, hostel_block, name, created_at')
             .eq('id', user.id)
             .single()
 
@@ -42,6 +44,23 @@ export async function GET(request: Request) {
             timestamp: string
             read: boolean
         }> = []
+
+        // ── Welcome notification for newly registered users (within 7 days) ──
+        if (profile.created_at) {
+            const createdAt = new Date(profile.created_at)
+            const daysSinceCreation = (Date.now() - createdAt.getTime()) / (1000 * 60 * 60 * 24)
+            if (daysSinceCreation <= 7) {
+                const firstName = sanitize(profile.name, 30).split(' ')[0] || 'there'
+                notifications.push({
+                    id: `welcome-${user.id}`,
+                    type: 'welcome',
+                    title: `Welcome, ${firstName}! 🎉`,
+                    message: 'You\'re all set! Rate your meals, scan QR for check-in, and file complaints — your voice shapes the hostel experience.',
+                    timestamp: profile.created_at,
+                    read: false,
+                })
+            }
+        }
 
         if (profile.role === 'student') {
             // Check if any complaints have been replied to recently

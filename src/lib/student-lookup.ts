@@ -141,6 +141,15 @@ function loadStudentData(): Map<string, StudentRecord> {
 }
 
 /**
+ * Invalidate the in-memory student cache.
+ * Called after an admin uploads a new XLSX file so the next lookup reloads fresh data.
+ */
+export function invalidateStudentCache(): void {
+  studentCache = null
+  console.log('[StudentLookup] Cache invalidated — will reload on next lookup')
+}
+
+/**
  * Look up full student details by Register ID from the master XLSX.
  * Returns the full StudentRecord if found, or null if not found.
  */

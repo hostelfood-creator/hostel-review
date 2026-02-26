@@ -3,6 +3,7 @@ import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { checkRateLimitAsync, getClientIp, rateLimitResponse } from '@/lib/rate-limit'
 import { lookupStudent } from '@/lib/student-lookup'
+import { sendWelcomeEmail } from '@/lib/email'
 
 // ── Input validation helpers ──────────────────────────────
 function validateRegistrationInput(body: Record<string, unknown>) {
@@ -65,12 +66,13 @@ export async function POST(request: Request) {
     // Duplicate email check — only one account per email address
     const { createClient: createSupabaseAdmin } = await import('@supabase/supabase-js')
     const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-    if (!serviceRoleKey) {
-      console.error('CRITICAL: SUPABASE_SERVICE_ROLE_KEY is not set — registration cannot verify email uniqueness')
+    const supabaseUrlForAdmin = process.env.NEXT_PUBLIC_SUPABASE_URL
+    if (!serviceRoleKey || !supabaseUrlForAdmin) {
+      console.error('CRITICAL: SUPABASE_SERVICE_ROLE_KEY or NEXT_PUBLIC_SUPABASE_URL is not set')
       return NextResponse.json({ error: 'Server configuration error. Please contact admin.' }, { status: 500 })
     }
     const adminClient = createSupabaseAdmin(
-      process.env.NEXT_PUBLIC_SUPABASE_URL || '',
+      supabaseUrlForAdmin,
       serviceRoleKey,
       { auth: { autoRefreshToken: false, persistSession: false } }
     )
@@ -124,17 +126,14 @@ export async function POST(request: Request) {
       }
     )
 
-    const syntheticEmail = `${cleanId.toLowerCase()}@hostel.local`
-
-    // ARCHITECTURE NOTE: We use a synthetic email for Supabase Auth because students log in
-    // via Register ID (not email). Supabase Auth requires an email, so we construct a
-    // deterministic synthetic email from the Register ID. The login route (/api/auth/login)
-    // constructs the same address. The real university email is stored in the profiles table
-    // for password recovery and is NOT used for Supabase Auth.
+    // Use the real university email for Supabase Auth so auth.users.email is always
+    // a deliverable, human-readable address. The login route resolves registerId → email
+    // via the profiles table.
+    const authEmail = cleanEmail
 
     // 1. Create user in Supabase Auth
     const { data: authData, error: authError } = await supabase.auth.signUp({
-      email: syntheticEmail,
+      email: authEmail,
       password: cleanPass,
     })
 
@@ -148,6 +147,15 @@ export async function POST(request: Request) {
 
     if (!authData.user) {
       return NextResponse.json({ error: 'Failed to create user' }, { status: 500 })
+    }
+
+    // Auto-confirm the user's email so signInWithPassword works immediately.
+    // signUp() with the anon key may leave email_confirmed_at=NULL if Supabase
+    // email confirmation is enabled in the dashboard.
+    try {
+      await adminClient.auth.admin.updateUserById(authData.user.id, { email_confirm: true })
+    } catch (confirmErr) {
+      console.error('[Register] Auto-confirm failed (non-fatal):', confirmErr)
     }
 
     // 3. Create user profile
@@ -172,6 +180,16 @@ export async function POST(request: Request) {
       }
       return NextResponse.json({ error: 'Failed to create user profile' }, { status: 500 })
     }
+
+    // Send welcome email (fire-and-forget — never block registration)
+    sendWelcomeEmail({
+      email: cleanEmail,
+      name: verifiedName,
+      registerId: cleanId,
+      hostelBlock: cleanBlock,
+      department: verifiedDept,
+      year: verifiedYear,
+    }).catch(() => { /* already logged inside sendWelcomeEmail */ })
 
     const response = NextResponse.json({
       user: {

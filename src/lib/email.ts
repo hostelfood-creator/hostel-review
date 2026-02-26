@@ -207,7 +207,9 @@ export function buildWelcomeEmail(params: WelcomeEmailParams): string {
                       <tr>
                         <td style="width:48px;vertical-align:top;padding:16px 0 16px 16px;">
                           <table role="presentation" cellpadding="0" cellspacing="0"><tr>
-                            <td style="width:40px;height:40px;background:#fbbf24;border-radius:8px;text-align:center;vertical-align:middle;color:#ffffff;font-size:18px;font-weight:800;line-height:40px;">R</td>
+                            <td style="width:40px;height:40px;background:#fbbf24;border-radius:8px;text-align:center;vertical-align:middle;">
+                              <img src="https://api.iconify.design/fa6-solid/star.svg?color=%23ffffff&width=20&height=20" alt="Rate" width="20" height="20" style="display:block;margin:auto;border:0;" />
+                            </td>
                           </tr></table>
                         </td>
                         <td style="padding:16px 16px 16px 14px;vertical-align:top;">
@@ -226,7 +228,9 @@ export function buildWelcomeEmail(params: WelcomeEmailParams): string {
                       <tr>
                         <td style="width:48px;vertical-align:top;padding:16px 0 16px 16px;">
                           <table role="presentation" cellpadding="0" cellspacing="0"><tr>
-                            <td style="width:40px;height:40px;background:#34d399;border-radius:8px;text-align:center;vertical-align:middle;color:#ffffff;font-size:18px;font-weight:800;line-height:40px;">Q</td>
+                            <td style="width:40px;height:40px;background:#34d399;border-radius:8px;text-align:center;vertical-align:middle;">
+                              <img src="https://api.iconify.design/fa6-solid/qrcode.svg?color=%23ffffff&width=20&height=20" alt="QR" width="20" height="20" style="display:block;margin:auto;border:0;" />
+                            </td>
                           </tr></table>
                         </td>
                         <td style="padding:16px 16px 16px 14px;vertical-align:top;">
@@ -245,7 +249,9 @@ export function buildWelcomeEmail(params: WelcomeEmailParams): string {
                       <tr>
                         <td style="width:48px;vertical-align:top;padding:16px 0 16px 16px;">
                           <table role="presentation" cellpadding="0" cellspacing="0"><tr>
-                            <td style="width:40px;height:40px;background:#f472b6;border-radius:8px;text-align:center;vertical-align:middle;color:#ffffff;font-size:18px;font-weight:800;line-height:40px;">C</td>
+                            <td style="width:40px;height:40px;background:#f472b6;border-radius:8px;text-align:center;vertical-align:middle;">
+                              <img src="https://api.iconify.design/fa6-solid/comment-dots.svg?color=%23ffffff&width=20&height=20" alt="Complaints" width="20" height="20" style="display:block;margin:auto;border:0;" />
+                            </td>
                           </tr></table>
                         </td>
                         <td style="padding:16px 16px 16px 14px;vertical-align:top;">
@@ -264,7 +270,9 @@ export function buildWelcomeEmail(params: WelcomeEmailParams): string {
                       <tr>
                         <td style="width:48px;vertical-align:top;padding:16px 0 16px 16px;">
                           <table role="presentation" cellpadding="0" cellspacing="0"><tr>
-                            <td style="width:40px;height:40px;background:#60a5fa;border-radius:8px;text-align:center;vertical-align:middle;color:#ffffff;font-size:18px;font-weight:800;line-height:40px;">H</td>
+                            <td style="width:40px;height:40px;background:#60a5fa;border-radius:8px;text-align:center;vertical-align:middle;">
+                              <img src="https://api.iconify.design/fa6-solid/clock-rotate-left.svg?color=%23ffffff&width=20&height=20" alt="History" width="20" height="20" style="display:block;margin:auto;border:0;" />
+                            </td>
                           </tr></table>
                         </td>
                         <td style="padding:16px 16px 16px 14px;vertical-align:top;">

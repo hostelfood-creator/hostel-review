@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next'
 import { headers } from 'next/headers'
 import './globals.css'
 import { ThemeProvider } from '@/lib/theme'
+import { I18nProvider } from '@/lib/i18n'
 import { PreloaderWrapper } from '@/components/preloader-wrapper'
 import { ToasterProvider } from '@/components/toaster-provider'
 import MaintenanceOverlay from '@/components/maintenance-overlay'
@@ -76,11 +77,13 @@ export default async function RootLayout({
       </head>
       <body className="min-h-screen bg-background text-foreground font-sans antialiased transition-colors duration-200">
         <ThemeProvider>
-          <PreloaderWrapper />
-          <MaintenanceOverlay />
-          <ServiceWorkerRegister />
-          {children}
-          <ToasterProvider />
+          <I18nProvider>
+            <PreloaderWrapper />
+            <MaintenanceOverlay />
+            <ServiceWorkerRegister />
+            {children}
+            <ToasterProvider />
+          </I18nProvider>
         </ThemeProvider>
       </body>
     </html>

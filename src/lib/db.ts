@@ -248,7 +248,7 @@ export async function getMenusByDate(date: string) {
     .eq('date', date)
 
   if (error || !data) return []
-  return data.map((m) => ({ ...m, _id: m.id, mealType: m.meal_type }))
+  return data.map((m) => ({ ...m, _id: m.id, mealType: m.meal_type, specialLabel: m.special_label || null }))
 }
 
 export async function upsertMenu(data: {
@@ -256,12 +256,19 @@ export async function upsertMenu(data: {
   mealType: string;
   items: string;
   timing: string;
+  specialLabel?: string | null;
 }) {
   const supabase = await createClient()
   const { data: inserted, error } = await supabase
     .from('menus')
     .upsert(
-      { date: data.date, meal_type: data.mealType, items: data.items, timing: data.timing },
+      {
+        date: data.date,
+        meal_type: data.mealType,
+        items: data.items,
+        timing: data.timing,
+        special_label: data.specialLabel || null,
+      },
       { onConflict: 'date,meal_type' }
     )
     .select()

@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
 import { ThemeToggle } from '@/lib/theme'
+import { useTranslation } from '@/lib/i18n'
+import { LanguageSwitcher } from '@/components/language-switcher'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { faUtensils, faChartLine, faMessage, faBars, faRightFromBracket, faCommentDots, faQrcode, faClipboardList, faFileLines } from '@fortawesome/free-solid-svg-icons'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
@@ -52,14 +54,16 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     )
   }
 
+  const { t } = useTranslation()
+
   const navItems = [
-    { href: '/admin', icon: <FontAwesomeIcon icon={faChartLine} className="w-5 h-5" />, label: 'Dashboard' },
-    { href: '/admin/reviews', icon: <FontAwesomeIcon icon={faMessage} className="w-5 h-5" />, label: 'Reviews' },
-    { href: '/admin/menu', icon: <FontAwesomeIcon icon={faUtensils} className="w-5 h-5" />, label: 'Menu' },
-    { href: '/admin/complaints', icon: <FontAwesomeIcon icon={faCommentDots} className="w-5 h-5" />, label: 'Complaints' },
-    { href: '/admin/attendance', icon: <FontAwesomeIcon icon={faQrcode} className="w-5 h-5" />, label: 'Attendance' },
-    { href: '/admin/attendance/list', icon: <FontAwesomeIcon icon={faClipboardList} className="w-5 h-5" />, label: 'Attendance List' },
-    { href: '/admin/reports', icon: <FontAwesomeIcon icon={faFileLines} className="w-5 h-5" />, label: 'Reports' },
+    { href: '/admin', icon: <FontAwesomeIcon icon={faChartLine} className="w-5 h-5" />, label: t.nav.dashboard },
+    { href: '/admin/reviews', icon: <FontAwesomeIcon icon={faMessage} className="w-5 h-5" />, label: t.nav.reviews },
+    { href: '/admin/menu', icon: <FontAwesomeIcon icon={faUtensils} className="w-5 h-5" />, label: t.nav.menu },
+    { href: '/admin/complaints', icon: <FontAwesomeIcon icon={faCommentDots} className="w-5 h-5" />, label: t.nav.complaints },
+    { href: '/admin/attendance', icon: <FontAwesomeIcon icon={faQrcode} className="w-5 h-5" />, label: t.nav.attendance },
+    { href: '/admin/attendance/list', icon: <FontAwesomeIcon icon={faClipboardList} className="w-5 h-5" />, label: t.nav.attendanceList },
+    { href: '/admin/reports', icon: <FontAwesomeIcon icon={faFileLines} className="w-5 h-5" />, label: t.nav.reports },
   ]
 
   // Add Super Admin specific features
@@ -67,7 +71,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     navItems.push({
       href: '/admin/blocks',
       icon: <FontAwesomeIcon icon={faBars} className="w-5 h-5" />,
-      label: 'Hostel Blocks',
+      label: t.nav.blocks,
     })
   }
 
@@ -143,7 +147,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             className="w-full justify-start text-muted-foreground hover:text-red-500 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/5"
           >
             <FontAwesomeIcon icon={faRightFromBracket} className="w-4 h-4 mr-2" />
-            Sign Out
+            {t.common.logout}
           </Button>
         </div>
       </aside>
@@ -169,6 +173,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               day: 'numeric',
             })}
           </span>
+          <LanguageSwitcher variant="compact" />
           <ThemeToggle />
         </header>
 

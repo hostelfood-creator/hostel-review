@@ -56,6 +56,7 @@ export default function LoginPage() {
       if (nameLocked) {
         setNameLocked(false)
         setEmailLocked(false)
+        setFieldsLocked(false)
         setForm(prev => ({ ...prev, name: '', email: '' }))
       }
       return
@@ -68,6 +69,7 @@ export default function LoginPage() {
         if (nameLocked) {
           setNameLocked(false)
           setEmailLocked(false)
+          setFieldsLocked(false)
           setForm(prev => ({ ...prev, name: '', email: '' }))
         }
         toast.error('Too many lookups — please wait a moment and try again.')
@@ -77,6 +79,7 @@ export default function LoginPage() {
         if (nameLocked) {
           setNameLocked(false)
           setEmailLocked(false)
+          setFieldsLocked(false)
           setForm(prev => ({ ...prev, name: '', email: '' }))
         }
         console.error('Lookup failed:', res.status)
@@ -89,16 +92,20 @@ export default function LoginPage() {
           ...prev,
           name: data.name,
           email: autoEmail,
+          ...(data.hostelBlock ? { hostelBlock: data.hostelBlock } : {}),
+          ...(data.department ? { department: data.department } : {}),
+          ...(data.year ? { year: data.year } : {}),
         }))
         setNameLocked(true)
         setEmailLocked(true)
-        // Note: hostel/dept/year are NOT auto-filled from lookup (PII protection).
-        // The server enforces correct values from XLSX records during registration.
+        setFieldsLocked(true)
         // Clear errors for auto-filled fields
         setFieldErrors(prev => {
           const n = { ...prev }
           delete n.name
           delete n.email
+          if (data.hostelBlock) delete n.hostelBlock
+          if (data.year) delete n.year
           return n
         })
       } else {
@@ -108,11 +115,13 @@ export default function LoginPage() {
         }
         setNameLocked(false)
         setEmailLocked(false)
+        setFieldsLocked(false)
       }
     } catch {
       if (nameLocked) {
         setNameLocked(false)
         setEmailLocked(false)
+        setFieldsLocked(false)
         setForm(prev => ({ ...prev, name: '', email: '' }))
       }
     } finally {
@@ -566,9 +575,10 @@ export default function LoginPage() {
                           </Label>
                           <Select
                             value={form.hostelBlock}
-                            onValueChange={(v) => updateForm('hostelBlock', v)}
+                            onValueChange={(v) => { if (!fieldsLocked) updateForm('hostelBlock', v) }}
+                            disabled={fieldsLocked}
                           >
-                            <SelectTrigger className={`h-11 ${fieldErrors.hostelBlock ? 'border-destructive' : ''}`}>
+                            <SelectTrigger className={`h-11 ${fieldsLocked ? 'bg-muted cursor-not-allowed' : ''} ${fieldErrors.hostelBlock ? 'border-destructive' : ''}`}>
                               <SelectValue placeholder="Select" />
                             </SelectTrigger>
                             <SelectContent>
@@ -615,13 +625,17 @@ export default function LoginPage() {
                           id="department"
                           type="text"
                           value={form.department}
-                          onChange={(e) => updateForm('department', e.target.value)}
+                          onChange={(e) => { if (!fieldsLocked) updateForm('department', e.target.value) }}
+                          readOnly={fieldsLocked}
                           placeholder="Enter your Department"
-                          className="h-11 text-base"
+                          className={`h-11 text-base ${fieldsLocked ? 'bg-muted cursor-not-allowed' : ''}`}
                         />
                       </div>
                       {nameLocked && (
-                        <p className="text-xs text-emerald-600 dark:text-emerald-400 -mt-1">Name verified from university records. Hostel and department will be confirmed on submission.</p>
+                        <div className="space-y-1 -mt-1">
+                          <p className="text-xs text-emerald-600 dark:text-emerald-400">Details auto-filled from university records.</p>
+                          <p className="text-xs text-amber-600 dark:text-amber-400">If any information is incorrect, please contact the hostel admin after registration.</p>
+                        </div>
                       )}
                     </>
                   ) : null}

@@ -8,6 +8,8 @@ import Link from 'next/link'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { faUtensils, faClock, faUserCircle, faBell, faRightFromBracket, faCommentDots, faQrcode } from '@fortawesome/free-solid-svg-icons'
 import { ThemeToggle } from '@/lib/theme'
+import { useTranslation } from '@/lib/i18n'
+import { LanguageSwitcher } from '@/components/language-switcher'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -133,12 +135,14 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
     )
   }
 
+  const { t } = useTranslation()
+
   const navItems = [
-    { href: '/student', icon: <FontAwesomeIcon icon={faUtensils} className="w-5 h-5" />, label: 'Menu' },
-    { href: '/student/scan', icon: <FontAwesomeIcon icon={faQrcode} className="w-5 h-5" />, label: 'Check-in' },
-    { href: '/student/history', icon: <FontAwesomeIcon icon={faClock} className="w-5 h-5" />, label: 'History' },
-    { href: '/student/complaints', icon: <FontAwesomeIcon icon={faCommentDots} className="w-5 h-5" />, label: 'Complaints' },
-    { href: '/student/profile', icon: <FontAwesomeIcon icon={faUserCircle} className="w-5 h-5" />, label: 'Profile' },
+    { href: '/student', icon: <FontAwesomeIcon icon={faUtensils} className="w-5 h-5" />, label: t.nav.menu },
+    { href: '/student/scan', icon: <FontAwesomeIcon icon={faQrcode} className="w-5 h-5" />, label: t.nav.checkin },
+    { href: '/student/history', icon: <FontAwesomeIcon icon={faClock} className="w-5 h-5" />, label: t.nav.history },
+    { href: '/student/complaints', icon: <FontAwesomeIcon icon={faCommentDots} className="w-5 h-5" />, label: t.nav.complaints },
+    { href: '/student/profile', icon: <FontAwesomeIcon icon={faUserCircle} className="w-5 h-5" />, label: t.nav.profile },
   ]
 
   const initials = user.name
@@ -206,7 +210,7 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
             className="w-full justify-start text-muted-foreground hover:text-red-500 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/5"
           >
             <FontAwesomeIcon icon={faRightFromBracket} className="w-4 h-4 mr-2" />
-            Sign Out
+            {t.common.logout}
           </Button>
         </div>
       </aside>
@@ -237,6 +241,7 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
                   {user.hostelBlock}
                 </Badge>
               )}
+              <LanguageSwitcher variant="compact" />
               <ThemeToggle />
               <div className="relative">
                 <Button

@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { faStar, faCircleCheck, faArrowRight, faLock, faLockOpen, faUserCircle, faQrcode, faCalendarCheck } from '@fortawesome/free-solid-svg-icons'
+import { faStar, faCircleCheck, faArrowRight, faLock, faLockOpen, faUserCircle, faQrcode, faCalendarCheck, faCrown } from '@fortawesome/free-solid-svg-icons'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -13,6 +13,7 @@ import { Slider } from '@/components/ui/slider'
 import { toast } from 'sonner'
 import { motion, AnimatePresence } from 'framer-motion'
 import Link from 'next/link'
+import { useTranslation } from '@/lib/i18n'
 
 
 interface MenuData {
@@ -21,6 +22,7 @@ interface MenuData {
   mealType: string
   items: string
   timing: string
+  specialLabel?: string | null
 }
 
 interface ReviewState {
@@ -39,6 +41,7 @@ interface ReviewState {
 
 // Dynamic tags by rating tier and meal type:
 // Low (1-2) → negative problem tags | Neutral (3) → mixed | High (4-5) → positive praise tags
+// Now loaded from i18n translations — fallback constants kept for non-i18n callers
 const FEEDBACK_TAGS: Record<string, Record<'low' | 'neutral' | 'high', string[]>> = {
   breakfast: {
     low: ['Cold', 'Undercooked', 'Tasteless', 'Salty', 'Missing Items', 'Stale'],
@@ -62,7 +65,7 @@ const FEEDBACK_TAGS: Record<string, Record<'low' | 'neutral' | 'high', string[]>
   },
 }
 
-function getTagsForRating(mealType: string, rating: number): string[] {
+function getTagsForRatingStatic(mealType: string, rating: number): string[] {
   const group = FEEDBACK_TAGS[mealType]
   if (!group) return []
   if (rating <= 2) return group.low
@@ -122,6 +125,7 @@ function isMealOpen(timing: string, currentHour: number): boolean {
 }
 
 export default function StudentDashboard() {
+  const { t } = useTranslation()
   const [menus, setMenus] = useState<MenuData[]>([])
   const [reviews, setReviews] = useState<ReviewState>({})
   const [todayDate, setTodayDate] = useState('')
@@ -131,6 +135,29 @@ export default function StudentDashboard() {
   const [checkinStatus, setCheckinStatus] = useState<{ checkedIn: boolean; mealType?: string; mealLabel?: string } | null>(null)
   const [weeklyHistory, setWeeklyHistory] = useState<{ date: string; meals: string[] }[] | null>(null)
   const [weeklyPercentage, setWeeklyPercentage] = useState(0)
+
+  // i18n-aware meal labels
+  const MEAL_LABELS_I18N: Record<string, string> = {
+    breakfast: t.meals.breakfastUpper,
+    lunch: t.meals.lunchUpper,
+    snacks: t.meals.snacksUpper,
+    dinner: t.meals.dinnerUpper,
+  }
+  const DEFAULT_ITEMS_I18N: Record<string, string> = {
+    breakfast: t.student.menuNotUpdated,
+    lunch: t.student.menuNotUpdated,
+    snacks: t.student.menuNotUpdated,
+    dinner: t.student.menuNotUpdated,
+  }
+
+  // i18n-aware feedback tags
+  const getTagsForRating = useCallback((mealType: string, rating: number): string[] => {
+    const group = t.feedbackTags[mealType as keyof typeof t.feedbackTags]
+    if (!group) return getTagsForRatingStatic(mealType, rating)
+    if (rating <= 2) return group.low
+    if (rating === 3) return group.neutral
+    return group.high
+  }, [t])
 
   useEffect(() => {
     fetch('/api/auth/me')
@@ -333,7 +360,7 @@ export default function StudentDashboard() {
   }
 
   const getGreeting = () => {
-    const base = serverHour < 12 ? 'Good Morning' : serverHour < 17 ? 'Good Afternoon' : 'Good Evening'
+    const base = serverHour < 12 ? t.student.goodMorning : serverHour < 17 ? t.student.goodAfternoon : t.student.goodEvening
     return userName ? `${base}, ${userName}` : base
   }
 
@@ -348,7 +375,7 @@ export default function StudentDashboard() {
         </BlurFade>
         <BlurFade delay={0.3} inView>
           <p className="text-xl text-muted-foreground tracking-tight sm:text-2xl xl:text-3xl mt-1">
-            Ready to rate your meals today?
+            {t.student.readyToRate}
           </p>
         </BlurFade>
       </section>
@@ -379,16 +406,16 @@ export default function StudentDashboard() {
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-semibold text-foreground">
                   {checkinStatus?.checkedIn
-                    ? `Checked in for ${checkinStatus.mealLabel || 'meal'}`
+                    ? `${t.student.checkedInFor} ${checkinStatus.mealLabel || 'meal'}`
                     : checkinStatus?.mealType
-                      ? `Check in for ${checkinStatus.mealLabel || 'meal'}`
-                      : 'Meal Check-in'
+                      ? `${t.student.checkInFor} ${checkinStatus.mealLabel || 'meal'}`
+                      : t.student.mealCheckin
                   }
                 </p>
                 <p className="text-xs text-muted-foreground mt-0.5">
                   {checkinStatus?.checkedIn
-                    ? 'You\'re all set! Tap to view details.'
-                    : 'Scan the QR code or tap here to check in'
+                    ? t.student.allSet
+                    : t.student.scanQR
                   }
                 </p>
               </div>
@@ -409,10 +436,10 @@ export default function StudentDashboard() {
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
                   <FontAwesomeIcon icon={faCalendarCheck} className="w-4 h-4 text-primary" />
-                  <span className="text-sm font-semibold text-foreground">This Week</span>
+                  <span className="text-sm font-semibold text-foreground">{t.student.thisWeek}</span>
                 </div>
                 <Badge variant="secondary" className="text-[10px]">
-                  {weeklyPercentage}% attended
+                  {weeklyPercentage}% {t.student.attended}
                 </Badge>
               </div>
               <div className="flex gap-1.5">
@@ -442,8 +469,8 @@ export default function StudentDashboard() {
                 })}
               </div>
               <div className="flex items-center gap-3 mt-3 text-[10px] text-muted-foreground">
-                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-green-500 inline-block" /> Attended</span>
-                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-muted inline-block" /> Missed</span>
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-green-500 inline-block" /> {t.student.attended}</span>
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-muted inline-block" /> {t.student.missed}</span>
               </div>
             </CardContent>
           </Card>
@@ -454,7 +481,7 @@ export default function StudentDashboard() {
       <BlurFade delay={0.4} inView>
         <div className="mb-6">
           <h1 className="text-2xl font-black text-foreground tracking-tight leading-none">
-            TODAY&apos;S MENU
+            {t.student.todaysMenu}
           </h1>
           <p className="text-muted-foreground text-base font-medium mt-1 tracking-wide">
             {displayDate}
@@ -467,7 +494,7 @@ export default function StudentDashboard() {
         {MEAL_ORDER.map((mealType, index) => {
           const menu = getMenuForMeal(mealType)
           const review = reviews[mealType]
-          const items = menu?.items || DEFAULT_ITEMS[mealType]
+          const items = menu?.items || DEFAULT_ITEMS_I18N[mealType]
           const timing = menu?.timing || DEFAULT_TIMING[mealType]
           const isSubmitted = review?.submitted
           const isOpen = isMealOpen(timing, serverHour)
@@ -521,22 +548,34 @@ export default function StudentDashboard() {
                         )}
                       </AnimatePresence>
                       <div>
-                        <h2 className="text-lg font-bold text-foreground tracking-tight">
-                          {MEAL_LABELS[mealType]}
-                        </h2>
+                        <div className="flex items-center gap-2">
+                          <h2 className="text-lg font-bold text-foreground tracking-tight">
+                            {MEAL_LABELS_I18N[mealType]}
+                          </h2>
+                          {menu?.specialLabel && (
+                            <motion.span
+                              initial={{ scale: 0.7, opacity: 0 }}
+                              animate={{ scale: 1, opacity: 1 }}
+                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-gradient-to-r from-amber-100 to-orange-100 dark:from-amber-500/15 dark:to-orange-500/15 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-500/20 shadow-sm"
+                            >
+                              <FontAwesomeIcon icon={faCrown} className="w-2.5 h-2.5" />
+                              {menu.specialLabel}
+                            </motion.span>
+                          )}
+                        </div>
                         <p className="text-xs text-muted-foreground font-medium">{timing}</p>
                       </div>
                     </div>
                     {isSubmitted && (
                       <Badge variant="secondary" className="text-[10px] font-semibold uppercase tracking-wider rounded-md bg-green-100 dark:bg-green-500/10 text-green-700 dark:text-green-400 border-green-200 dark:border-green-500/20">
                         <FontAwesomeIcon icon={faCircleCheck} className="w-3 h-3 mr-1" />
-                        Reviewed
+                        {t.student.reviewed}
                       </Badge>
                     )}
                     {!isOpen && !isSubmitted && (
                       <Badge variant="secondary" className="text-[10px] font-semibold uppercase tracking-wider rounded-md">
                         <FontAwesomeIcon icon={faLock} className="w-3 h-3 mr-1" />
-                        Locked
+                        {t.student.locked}
                       </Badge>
                     )}
                   </div>
@@ -560,10 +599,10 @@ export default function StudentDashboard() {
                         </div>
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-semibold text-foreground leading-tight">
-                            Thank you for your feedback.
+                            {t.student.thankYou}
                           </p>
                           <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
-                            The hostel management has received your review and will act on it accordingly.
+                            {t.student.managementReceived}
                           </p>
                           <div className="flex items-center gap-2 mt-2">
                             <span className="text-lg">{['😡', '🙁', '😐', '🙂', '😍'][(review?.existingRating || 1) - 1]}</span>
@@ -589,7 +628,7 @@ export default function StudentDashboard() {
                     <div className="flex flex-col gap-3 pl-[46px]">
                       {/* Interactive Slider Rating */}
                       <div className="flex flex-col gap-2 mb-2">
-                        <Label className="text-xs text-muted-foreground font-medium">Rate your experience</Label>
+                        <Label className="text-xs text-muted-foreground font-medium">{t.student.rateExperience}</Label>
                         <div className="flex items-center gap-4">
                           <Slider
                             value={[(review?.rating || 0) === 0 ? 3 : review!.rating]}
@@ -598,7 +637,7 @@ export default function StudentDashboard() {
                             max={5}
                             step={1}
                             showTooltip
-                            tooltipContent={(value: number) => ["Awful", "Poor", "Okay", "Good", "Amazing"][value - 1]}
+                            tooltipContent={(value: number) => t.student.ratingLabels[value - 1]}
                             aria-label="Rate your experience"
                             className="flex-1"
                           />
@@ -644,7 +683,7 @@ export default function StudentDashboard() {
                             type="text"
                             value={review?.reviewText || ''}
                             onChange={(e) => setReviewText(mealType, e.target.value)}
-                            placeholder="Anything else to add? (optional)"
+                            placeholder={t.student.anythingToAdd}
                             className="flex-1 h-10 text-sm"
                           />
                           <Button
@@ -667,7 +706,7 @@ export default function StudentDashboard() {
                   ) : (
                     <div className="pl-[46px]">
                       <p className="text-xs text-muted-foreground italic">
-                        Reviews will open at meal time
+                        {t.student.reviewsOpenAt}
                       </p>
                     </div>
                   )}

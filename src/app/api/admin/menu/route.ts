@@ -55,7 +55,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
     }
 
-    const { date, mealType, items, timing } = await request.json()
+    const { date, mealType, items, timing, specialLabel } = await request.json()
 
     const VALID_MEAL_TYPES = ['breakfast', 'lunch', 'snacks', 'dinner']
 
@@ -74,8 +74,11 @@ export async function POST(request: Request) {
     if (typeof timing !== 'string' || timing.length > 100) {
       return NextResponse.json({ error: 'Timing must be text (max 100 characters)' }, { status: 400 })
     }
+    if (specialLabel !== undefined && specialLabel !== null && (typeof specialLabel !== 'string' || specialLabel.length > 100)) {
+      return NextResponse.json({ error: 'Special label must be text (max 100 characters)' }, { status: 400 })
+    }
 
-    const menuId = await upsertMenu({ date, mealType, items, timing })
+    const menuId = await upsertMenu({ date, mealType, items, timing, specialLabel: specialLabel || null })
     return NextResponse.json({ menu: { id: menuId } })
   } catch (error) {
     console.error('Admin menu POST error:', error)

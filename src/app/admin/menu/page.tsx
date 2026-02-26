@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { faPencil, faCalendarWeek, faCheck } from '@fortawesome/free-solid-svg-icons'
+import { faPencil, faCalendarWeek, faCheck, faStar } from '@fortawesome/free-solid-svg-icons'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -17,6 +17,7 @@ interface MenuData {
   mealType: string
   items: string
   timing: string
+  specialLabel?: string | null
 }
 
 const MEAL_ORDER = ['breakfast', 'lunch', 'snacks', 'dinner']
@@ -33,6 +34,19 @@ const DEFAULT_TIMINGS: Record<string, string> = {
   snacks: '4:30 - 5:30 PM',
   dinner: '7:30 - 9:30 PM',
 }
+
+const SPECIAL_LABELS = [
+  'Festival Special',
+  'Guest Day',
+  'Pongal Special',
+  'Diwali Feast',
+  'Onam Special',
+  'Republic Day',
+  'Independence Day',
+  'Christmas Special',
+  'Eid Special',
+  'Exam Special',
+]
 
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
@@ -67,7 +81,7 @@ export default function AdminMenuPage() {
   const [menus, setMenus] = useState<MenuData[]>([])
   const [loading, setLoading] = useState(true)
   const [editing, setEditing] = useState<string | null>(null)
-  const [editForm, setEditForm] = useState({ items: '', timing: '' })
+  const [editForm, setEditForm] = useState({ items: '', timing: '', specialLabel: '' })
   const [saving, setSaving] = useState(false)
 
   const selectedDate = weekDates[activeDay].date
@@ -99,6 +113,7 @@ export default function AdminMenuPage() {
     setEditForm({
       items: existing?.items || '',
       timing: existing?.timing || DEFAULT_TIMINGS[meal] || '',
+      specialLabel: existing?.specialLabel || '',
     })
     setEditing(meal)
   }
@@ -118,6 +133,7 @@ export default function AdminMenuPage() {
           mealType: meal,
           items: editForm.items.trim(),
           timing: editForm.timing.trim() || DEFAULT_TIMINGS[meal],
+          specialLabel: editForm.specialLabel.trim() || null,
         }),
       })
       if (res.ok) {
@@ -208,9 +224,17 @@ export default function AdminMenuPage() {
                         <span className="w-2 h-2 rounded-full bg-green-500" />
                       )}
                       <div>
-                        <h3 className="text-sm font-bold text-foreground">
-                          {MEAL_LABELS[meal]}
-                        </h3>
+                        <div className="flex items-center gap-2">
+                          <h3 className="text-sm font-bold text-foreground">
+                            {MEAL_LABELS[meal]}
+                          </h3>
+                          {menu?.specialLabel && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 dark:bg-amber-500/15 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-500/20">
+                              <FontAwesomeIcon icon={faStar} className="w-2.5 h-2.5" />
+                              {menu.specialLabel}
+                            </span>
+                          )}
+                        </div>
                         <p className="text-[10px] text-muted-foreground font-medium mt-0.5">
                           {menu?.timing || DEFAULT_TIMINGS[meal]}
                         </p>
@@ -256,6 +280,43 @@ export default function AdminMenuPage() {
                           }
                           placeholder={DEFAULT_TIMINGS[meal]}
                           className="mt-1"
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-[10px] uppercase tracking-wider font-medium">
+                          Special Tag <span className="normal-case text-muted-foreground">(optional)</span>
+                        </Label>
+                        <div className="flex flex-wrap gap-1.5 mt-1.5 mb-1.5">
+                          {SPECIAL_LABELS.map((label) => (
+                            <button
+                              key={label}
+                              type="button"
+                              onClick={() =>
+                                setEditForm((f) => ({
+                                  ...f,
+                                  specialLabel: f.specialLabel === label ? '' : label,
+                                }))
+                              }
+                              className={`text-[10px] font-medium px-2 py-1 rounded-full border transition-all ${
+                                editForm.specialLabel === label
+                                  ? 'bg-amber-100 dark:bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-300 dark:border-amber-500/30'
+                                  : 'bg-background text-muted-foreground border-border hover:border-amber-300 hover:text-amber-600'
+                              }`}
+                            >
+                              <FontAwesomeIcon icon={faStar} className="w-2.5 h-2.5 mr-0.5" />
+                              {label}
+                            </button>
+                          ))}
+                        </div>
+                        <Input
+                          type="text"
+                          value={editForm.specialLabel}
+                          onChange={(e) =>
+                            setEditForm((f) => ({ ...f, specialLabel: e.target.value }))
+                          }
+                          placeholder="Or type a custom label..."
+                          className="mt-1"
+                          maxLength={100}
                         />
                       </div>
                       <div className="flex gap-2">

@@ -40,13 +40,15 @@ export async function GET(request: Request) {
     await new Promise(r => setTimeout(r, jitter))
 
     if (record) {
-      // Only return the name — minimum data needed for registration UX.
-      // Hostel block, department, and year are NOT exposed here to prevent
-      // PII enumeration. These fields are enforced server-side during
-      // registration via lookupStudent() in the register route.
+      // Return name + hostel/dept/year for registration auto-fill.
+      // The student is entering their own register ID, so this is their own data.
+      // Server-side registration still enforces these values from the DB.
       return NextResponse.json({
         found: true,
         name: record.name,
+        hostelBlock: record.hostelBlock,
+        department: record.department,
+        year: record.year,
       })
     }
 

@@ -1,0 +1,148 @@
+{
+  "common": {
+    "appName": "Hostel Food Review",
+    "loading": "Loading...",
+    "save": "Save",
+    "cancel": "Cancel",
+    "submit": "Submit",
+    "delete": "Delete",
+    "edit": "Edit",
+    "close": "Close",
+    "back": "Back",
+    "next": "Next",
+    "yes": "Yes",
+    "no": "No",
+    "ok": "OK",
+    "error": "Error",
+    "success": "Success",
+    "networkError": "Network error. Please try again.",
+    "unauthorized": "Unauthorized",
+    "notFound": "Not found",
+    "logout": "Logout",
+    "profile": "Profile",
+    "settings": "Settings"
+  },
+  "nav": {
+    "menu": "Menu",
+    "checkin": "Check-in",
+    "history": "History",
+    "complaints": "Complaints",
+    "profile": "Profile",
+    "reviews": "Reviews",
+    "attendance": "Attendance",
+    "reports": "Reports",
+    "dashboard": "Dashboard",
+    "blocks": "Hostel Blocks",
+    "attendanceList": "Attendance List"
+  },
+  "meals": {
+    "breakfast": "Breakfast",
+    "lunch": "Lunch",
+    "snacks": "Snacks",
+    "dinner": "Dinner",
+    "breakfastUpper": "BREAKFAST",
+    "lunchUpper": "LUNCH",
+    "snacksUpper": "SNACKS",
+    "dinnerUpper": "DINNER"
+  },
+  "student": {
+    "goodMorning": "Good Morning",
+    "goodAfternoon": "Good Afternoon",
+    "goodEvening": "Good Evening",
+    "readyToRate": "Ready to rate your meals today?",
+    "todaysMenu": "TODAY'S MENU",
+    "reviewed": "Reviewed",
+    "locked": "Locked",
+    "menuNotUpdated": "Menu not yet updated for today",
+    "rateExperience": "Rate your experience",
+    "anythingToAdd": "Anything else to add? (optional)",
+    "reviewsOpenAt": "Reviews will open at meal time",
+    "thankYou": "Thank you for your feedback.",
+    "managementReceived": "The hostel management has received your review and will act on it accordingly.",
+    "checkedInFor": "Checked in for",
+    "checkInFor": "Check in for",
+    "mealCheckin": "Meal Check-in",
+    "allSet": "You're all set! Tap to view details.",
+    "scanQR": "Scan the QR code or tap here to check in",
+    "thisWeek": "This Week",
+    "attended": "attended",
+    "missed": "Missed",
+    "ratingLabels": ["Awful", "Poor", "Okay", "Good", "Amazing"]
+  },
+  "feedbackTags": {
+    "breakfast": {
+      "low": ["Cold", "Undercooked", "Tasteless", "Salty", "Missing Items", "Stale"],
+      "neutral": ["Okay", "Average", "Could Improve", "Partially Good", "Acceptable"],
+      "high": ["Fresh", "Nutritious", "Perfectly Cooked", "Great Variety", "Excellent", "Hot & Tasty"]
+    },
+    "lunch": {
+      "low": ["Undercooked", "Overcooked", "Too Salty", "Spicy", "Small Portion", "Stale"],
+      "neutral": ["Average", "Okay", "Could be Better", "Acceptable Portion"],
+      "high": ["Tasty", "Fresh", "Well Portioned", "Flavorful", "Excellent", "Great Quality"]
+    },
+    "snacks": {
+      "low": ["Stale", "Oily", "Cold", "Not Fresh", "Tasteless", "Small Portion"],
+      "neutral": ["Average", "Okay", "Could Improve"],
+      "high": ["Fresh", "Crunchy", "Hot & Crispy", "Sweet", "Tasty", "Great Snack"]
+    },
+    "dinner": {
+      "low": ["Cold", "Undercooked", "Overcooked", "Too Salty", "Small Portion", "Missing Items"],
+      "neutral": ["Average", "Okay", "Could be Better", "Acceptable"],
+      "high": ["Tasty", "Fresh", "Well Portioned", "Excellent", "Nutritious", "Great Quality"]
+    }
+  },
+  "admin": {
+    "weeklyMenu": "Weekly Menu",
+    "setMenus": "Set menus for each day. Students see the menu for the current day automatically.",
+    "menuItems": "Menu Items",
+    "timing": "Timing",
+    "specialTag": "Special Tag",
+    "orTypeCustom": "Or type a custom label...",
+    "menuNotSet": "Menu not set for",
+    "addMenu": "+ Add Menu",
+    "saving": "Saving...",
+    "menuSaved": "menu saved for",
+    "dashboard": "Dashboard",
+    "totalReviews": "Total Reviews",
+    "avgRating": "Avg Rating",
+    "totalStudents": "Students",
+    "alerts": "Alerts",
+    "recentReviews": "Recent Reviews",
+    "mealAttendance": "Meal Attendance",
+    "maintenanceMode": "Maintenance Mode",
+    "uploadStudentData": "Upload Student Data"
+  },
+  "complaints": {
+    "title": "Complaints",
+    "newComplaint": "New Complaint",
+    "subject": "Subject",
+    "description": "Description",
+    "status": "Status",
+    "pending": "Pending",
+    "resolved": "Resolved",
+    "inProgress": "In Progress",
+    "noComplaints": "No complaints yet"
+  },
+  "auth": {
+    "login": "Login",
+    "register": "Register",
+    "forgotPassword": "Forgot Password?",
+    "registerId": "Register ID",
+    "password": "Password",
+    "name": "Full Name",
+    "email": "Email",
+    "department": "Department",
+    "year": "Year",
+    "hostelBlock": "Hostel Block",
+    "loginBtn": "Sign In",
+    "registerBtn": "Create Account",
+    "noAccount": "Don't have an account?",
+    "hasAccount": "Already have an account?"
+  },
+  "language": {
+    "en": "English",
+    "ta": "தமிழ்",
+    "hi": "हिन्दी",
+    "te": "తెలుగు"
+  }
+}

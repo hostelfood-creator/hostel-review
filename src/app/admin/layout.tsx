@@ -24,6 +24,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const pathname = usePathname()
   const [user, setUser] = useState<User | null>(null)
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const { t } = useTranslation()
 
   useEffect(() => {
     fetch('/api/auth/me')
@@ -53,8 +54,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       </div>
     )
   }
-
-  const { t } = useTranslation()
 
   const navItems = [
     { href: '/admin', icon: <FontAwesomeIcon icon={faChartLine} className="w-5 h-5" />, label: t.nav.dashboard },

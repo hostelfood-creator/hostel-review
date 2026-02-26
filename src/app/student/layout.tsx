@@ -43,6 +43,7 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [unreadCount, setUnreadCount] = useState(0)
   const [showNotifications, setShowNotifications] = useState(false)
+  const { t } = useTranslation()
 
   // Read IDs from localStorage
   const getReadIds = (): string[] => {
@@ -134,8 +135,6 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
       </div>
     )
   }
-
-  const { t } = useTranslation()
 
   const navItems = [
     { href: '/student', icon: <FontAwesomeIcon icon={faUtensils} className="w-5 h-5" />, label: t.nav.menu },

@@ -274,13 +274,10 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
                         ) : notifications.map((n) => (
                           <div key={n.id} className={`px-4 py-3 hover:bg-accent/50 transition-colors ${!n.read ? 'bg-primary/5' : ''}`}>
                             <div className="flex items-start gap-2.5">
-                              <span className="text-base mt-0.5">
-                                {n.type === 'menu_update' ? '🍽️' : n.type === 'complaint_reply' ? '💬' : n.type === 'maintenance' ? '🔧' : n.type === 'meal_attendance' ? '📋' : '🔔'}
-                              </span>
                               <div className="flex-1 min-w-0">
                                 {n.title && <p className="text-xs font-semibold text-foreground mb-0.5">{n.title}</p>}
                                 <p className="text-sm text-foreground leading-snug">{n.message}</p>
-                                <p className="text-[10px] text-muted-foreground mt-0.5 uppercase tracking-wide font-medium">
+                                <p className="text-[10px] text-muted-foreground mt-1 uppercase tracking-wide font-medium">
                                   {n.timestamp ? new Date(n.timestamp).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : ''}
                                 </p>
                               </div>

@@ -94,7 +94,7 @@ function getISTDateTime() {
 export async function POST(request: Request) {
   // Rate limit: 10 check-ins per minute per IP
   const ip = getClientIp(request)
-  const rl = checkRateLimit(`checkin:${ip}`, 10, 60 * 1000)
+  const rl = await checkRateLimit(`checkin:${ip}`, 10, 60 * 1000)
   if (!rl.allowed) return rateLimitResponse(rl.resetAt)
 
   try {
@@ -186,7 +186,7 @@ export async function POST(request: Request) {
 export async function GET(request: Request) {
   // Rate limit: 30 requests per minute per IP
   const ip = getClientIp(request)
-  const rl = checkRateLimit(`checkin-get:${ip}`, 30, 60 * 1000)
+  const rl = await checkRateLimit(`checkin-get:${ip}`, 30, 60 * 1000)
   if (!rl.allowed) return rateLimitResponse(rl.resetAt)
 
   try {

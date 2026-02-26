@@ -29,7 +29,7 @@ export async function GET(request: Request) {
   try {
     // Rate limit: 30 reads per minute per IP
     const ip = getClientIp(request)
-    const rl = checkRateLimit(`reviews-get:${ip}`, 30, 60 * 1000)
+    const rl = await checkRateLimit(`reviews-get:${ip}`, 30, 60 * 1000)
     if (!rl.allowed) return rateLimitResponse(rl.resetAt)
 
     const supabase = await createClient()
@@ -103,7 +103,7 @@ export async function POST(request: Request) {
   try {
     // Rate limit: 10 review submissions per 15 minutes per IP
     const ip = getClientIp(request)
-    const rl = checkRateLimit(`reviews-post:${ip}`, 10, 15 * 60 * 1000)
+    const rl = await checkRateLimit(`reviews-post:${ip}`, 10, 15 * 60 * 1000)
     if (!rl.allowed) return rateLimitResponse(rl.resetAt)
 
     const supabase = await createClient()
@@ -181,7 +181,7 @@ export async function POST(request: Request) {
 export async function PATCH(request: Request) {
   try {
     const ip = getClientIp(request)
-    const rl = checkRateLimit(`reviews-patch:${ip}`, 10, 15 * 60 * 1000)
+    const rl = await checkRateLimit(`reviews-patch:${ip}`, 10, 15 * 60 * 1000)
     if (!rl.allowed) return rateLimitResponse(rl.resetAt)
 
     const supabase = await createClient()
@@ -263,7 +263,7 @@ export async function PATCH(request: Request) {
 export async function DELETE(request: Request) {
   try {
     const ip = getClientIp(request)
-    const rl = checkRateLimit(`reviews-delete:${ip}`, 10, 15 * 60 * 1000)
+    const rl = await checkRateLimit(`reviews-delete:${ip}`, 10, 15 * 60 * 1000)
     if (!rl.allowed) return rateLimitResponse(rl.resetAt)
 
     const supabase = await createClient()

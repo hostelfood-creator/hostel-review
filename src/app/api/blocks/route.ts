@@ -9,7 +9,7 @@ import { checkRateLimit, getClientIp, rateLimitResponse } from '@/lib/rate-limit
 export async function GET(request: Request) {
     // Rate limit: 20 requests per minute per IP
     const ip = getClientIp(request)
-    const rl = checkRateLimit(`blocks:${ip}`, 20, 60 * 1000)
+    const rl = await checkRateLimit(`blocks:${ip}`, 20, 60 * 1000)
     if (!rl.allowed) return rateLimitResponse(rl.resetAt)
 
     const supabase = await createClient()

@@ -20,7 +20,7 @@ function getISTDate(): string {
 /** GET — Student check-in history for the past N days */
 export async function GET(request: Request) {
   const ip = getClientIp(request)
-  const rl = checkRateLimit(`checkin-history:${ip}`, 20, 60 * 1000)
+  const rl = await checkRateLimit(`checkin-history:${ip}`, 20, 60 * 1000)
   if (!rl.allowed) return rateLimitResponse(rl.resetAt)
 
   try {

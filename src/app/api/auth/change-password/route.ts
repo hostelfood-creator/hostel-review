@@ -7,7 +7,7 @@ export async function POST(request: Request) {
   try {
     // Rate limit: 5 password changes per 15 minutes per IP
     const ip = getClientIp(request)
-    const rl = checkRateLimit(`change-password:${ip}`, 5, 15 * 60 * 1000)
+    const rl = await checkRateLimit(`change-password:${ip}`, 5, 15 * 60 * 1000)
     if (!rl.allowed) return rateLimitResponse(rl.resetAt)
 
     const supabase = await createClient()

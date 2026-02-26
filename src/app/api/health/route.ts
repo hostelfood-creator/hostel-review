@@ -12,7 +12,7 @@ import { checkRateLimit, getClientIp, rateLimitResponse } from '@/lib/rate-limit
 export async function GET(request: Request) {
   // Rate limit: 60 health checks per minute per IP
   const ip = getClientIp(request)
-  const rl = checkRateLimit(`health:${ip}`, 60, 60 * 1000)
+  const rl = await checkRateLimit(`health:${ip}`, 60, 60 * 1000)
   if (!rl.allowed) return rateLimitResponse(rl.resetAt)
 
   return NextResponse.json(

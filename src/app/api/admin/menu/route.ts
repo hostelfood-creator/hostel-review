@@ -7,7 +7,7 @@ export async function GET(request: Request) {
   try {
     // Rate limit: 60 menu reads per 15 minutes per IP
     const ip = getClientIp(request)
-    const rl = checkRateLimit(`admin-menu-read:${ip}`, 60, 15 * 60 * 1000)
+    const rl = await checkRateLimit(`admin-menu-read:${ip}`, 60, 15 * 60 * 1000)
     if (!rl.allowed) return rateLimitResponse(rl.resetAt)
 
     const supabase = await createClient()
@@ -42,7 +42,7 @@ export async function POST(request: Request) {
   try {
     // Rate limit: 30 menu updates per 15 minutes per IP
     const ip = getClientIp(request)
-    const rl = checkRateLimit(`admin-menu:${ip}`, 30, 15 * 60 * 1000)
+    const rl = await checkRateLimit(`admin-menu:${ip}`, 30, 15 * 60 * 1000)
     if (!rl.allowed) return rateLimitResponse(rl.resetAt)
 
     const supabase = await createClient()

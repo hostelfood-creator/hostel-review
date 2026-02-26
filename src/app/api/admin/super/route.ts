@@ -12,7 +12,7 @@ import { checkRateLimit, getClientIp, rateLimitResponse } from '@/lib/rate-limit
 export async function GET(request: Request) {
     // Rate limit: 30 admin reads per minute per IP
     const ip = getClientIp(request)
-    const rl = checkRateLimit(`admin-super-get:${ip}`, 30, 60 * 1000)
+    const rl = await checkRateLimit(`admin-super-get:${ip}`, 30, 60 * 1000)
     if (!rl.allowed) return rateLimitResponse(rl.resetAt)
 
     const supabase = await createClient()
@@ -77,7 +77,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
     // Rate limit: 15 admin operations per 15 minutes per IP
     const ip = getClientIp(request)
-    const rl = checkRateLimit(`admin-super:${ip}`, 15, 15 * 60 * 1000)
+    const rl = await checkRateLimit(`admin-super:${ip}`, 15, 15 * 60 * 1000)
     if (!rl.allowed) return rateLimitResponse(rl.resetAt)
 
     const supabase = await createClient()

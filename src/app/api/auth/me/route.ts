@@ -8,7 +8,7 @@ export async function GET(request: Request) {
   try {
     // Rate limit: 30 requests per minute per IP
     const ip = getClientIp(request)
-    const rl = checkRateLimit(`auth-me:${ip}`, 30, 60 * 1000)
+    const rl = await checkRateLimit(`auth-me:${ip}`, 30, 60 * 1000)
     if (!rl.allowed) return rateLimitResponse(rl.resetAt)
 
     const cookieStore = await cookies()

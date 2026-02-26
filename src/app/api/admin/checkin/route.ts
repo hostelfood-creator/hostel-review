@@ -23,7 +23,7 @@ function getISTDate() {
 export async function GET(request: Request) {
   // Rate limit: 30 requests per minute per IP
   const ip = getClientIp(request)
-  const rl = checkRateLimit(`admin-checkin:${ip}`, 30, 60 * 1000)
+  const rl = await checkRateLimit(`admin-checkin:${ip}`, 30, 60 * 1000)
   if (!rl.allowed) return rateLimitResponse(rl.resetAt)
 
   try {

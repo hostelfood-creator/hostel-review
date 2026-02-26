@@ -22,7 +22,7 @@ function isValidTime(t: string): boolean {
 export async function GET(request: Request) {
   // Rate limit: 30 meal-timing reads per minute per IP
   const ip = getClientIp(request)
-  const rl = checkRateLimit(`meal-timings-admin-get:${ip}`, 30, 60 * 1000)
+  const rl = await checkRateLimit(`meal-timings-admin-get:${ip}`, 30, 60 * 1000)
   if (!rl.allowed) return rateLimitResponse(rl.resetAt)
 
   try {
@@ -57,7 +57,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const ip = getClientIp(request)
-    const rl = checkRateLimit(`meal-timings:${ip}`, 10, 15 * 60 * 1000)
+    const rl = await checkRateLimit(`meal-timings:${ip}`, 10, 15 * 60 * 1000)
     if (!rl.allowed) return rateLimitResponse(rl.resetAt)
 
     const supabase = await createClient()

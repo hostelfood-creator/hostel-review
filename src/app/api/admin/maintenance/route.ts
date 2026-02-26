@@ -7,7 +7,7 @@ export async function GET(request: Request) {
     try {
         // Rate limit: 30 maintenance reads per minute per IP
         const ip = getClientIp(request)
-        const rl = checkRateLimit(`maintenance-get:${ip}`, 30, 60 * 1000)
+        const rl = await checkRateLimit(`maintenance-get:${ip}`, 30, 60 * 1000)
         if (!rl.allowed) return rateLimitResponse(rl.resetAt)
 
         const supabase = await createClient()
@@ -57,7 +57,7 @@ export async function POST(request: Request) {
     try {
         // Rate limit: 5 maintenance toggles per 15 minutes per IP
         const ip = getClientIp(request)
-        const rl = checkRateLimit(`maintenance:${ip}`, 5, 15 * 60 * 1000)
+        const rl = await checkRateLimit(`maintenance:${ip}`, 5, 15 * 60 * 1000)
         if (!rl.allowed) return rateLimitResponse(rl.resetAt)
 
         const supabase = await createClient()

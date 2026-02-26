@@ -7,7 +7,7 @@ export async function GET(request: Request) {
   try {
     // Rate limit: 30 menu requests per minute per IP
     const ip = getClientIp(request)
-    const rl = checkRateLimit(`menu-today:${ip}`, 30, 60 * 1000)
+    const rl = await checkRateLimit(`menu-today:${ip}`, 30, 60 * 1000)
     if (!rl.allowed) return rateLimitResponse(rl.resetAt)
 
     const today = getTodayDate()

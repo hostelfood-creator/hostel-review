@@ -1,13 +1,12 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { checkRateLimit, getClientIp, rateLimitResponse } from '@/lib/rate-limit'
-import { lookupStudentName } from '@/lib/student-lookup'
 
 export async function PATCH(request: Request) {
     try {
         // Rate limit: 10 profile updates per 15 minutes per IP
         const ip = getClientIp(request)
-        const rl = checkRateLimit(`profile:${ip}`, 10, 15 * 60 * 1000)
+        const rl = await checkRateLimit(`profile:${ip}`, 10, 15 * 60 * 1000)
         if (!rl.allowed) return rateLimitResponse(rl.resetAt)
 
         const supabase = await createClient()
@@ -33,16 +32,15 @@ export async function PATCH(request: Request) {
         const updates: Record<string, string | null> = {}
 
         if (body.name !== undefined) {
-            // Block name edits for verified students — prevents spoofing official records
-            // Uses 5-minute in-memory cache to reduce DB queries
+            // Block name edits for verified students — prevents spoofing official records.
+            // If a student has a register_id, they're verified from university records.
+            // We block ALL name edits for such students, even if the lookup temporarily
+            // fails (returns null), to prevent spoofing via transient DB/network errors.
             if (profile.register_id) {
-                const xlsxName = await lookupStudentName(profile.register_id)
-                if (xlsxName) {
-                    return NextResponse.json(
-                        { error: 'Your name is verified from university records and cannot be changed' },
-                        { status: 403 }
-                    )
-                }
+                return NextResponse.json(
+                    { error: 'Your name is verified from university records and cannot be changed' },
+                    { status: 403 }
+                )
             }
 
             const name = (body.name || '').trim()

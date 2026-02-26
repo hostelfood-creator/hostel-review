@@ -4,19 +4,29 @@ import { lookupStudent } from '@/lib/student-lookup'
 
 /**
  * GET /api/auth/lookup?registerId=112451026
- * Returns student name from the `student_records` Supabase table.
- * Used on the registration page to auto-fill name when the student enters their Register ID.
+ * Public (unauthenticated) endpoint used during registration to auto-fill form fields.
  *
  * SOURCE: Seeded from "Students Details 2025-26.xlsx" — 5 hostel sheets (VH, AH, MH, KH, SH).
  * Data lives in the `student_records` table (works on serverless platforms).
  *
- * SECURITY: Rate-limited per IP (20/min) and per register ID (3/min).
- * Only the student name is returned (no hostel/dept/year — prevents PII enumeration).
+ * RETURNS: name, hostelBlock, department, year.
+ * These are needed pre-auth to auto-fill and lock the registration form. The server-side
+ * registration handler (POST /api/auth/register) independently re-verifies all values from
+ * the DB, so clients cannot tamper with locked fields.
+ *
+ * SECURITY TRADEOFFS:
+ * - Public endpoint → PII (hostel block, dept, year) is accessible without auth.
+ *   This is an intentional tradeoff for UX: students should see their own data pre-filled
+ *   during registration without first needing an account.
+ * - Mitigated by: rate limiting per IP (20/min), per register ID (3/min),
+ *   and timing-attack-resistant uniform random delay on all responses.
+ * - Acceptable risk: the exposed data is low-sensitivity student enrollment info,
+ *   not credentials or contact details. Mass enumeration is blocked by rate limits.
  */
 export async function GET(request: Request) {
   // Per-IP rate limit: 20 lookups/min — hostel students share WiFi (same public IP)
   const ip = getClientIp(request)
-  const rl = checkRateLimit(`lookup:${ip}`, 20, 60 * 1000)
+  const rl = await checkRateLimit(`lookup:${ip}`, 20, 60 * 1000)
   if (!rl.allowed) return rateLimitResponse(rl.resetAt)
 
   const { searchParams } = new URL(request.url)
@@ -28,7 +38,7 @@ export async function GET(request: Request) {
 
   // Per-registerId rate limit: 3 lookups per minute per specific ID
   // Prevents targeted enumeration of individual register IDs
-  const idRl = checkRateLimit(`lookup-id:${registerId}`, 3, 60 * 1000)
+  const idRl = await checkRateLimit(`lookup-id:${registerId}`, 3, 60 * 1000)
   if (!idRl.allowed) return rateLimitResponse(idRl.resetAt)
 
   try {

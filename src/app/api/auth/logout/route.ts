@@ -6,7 +6,7 @@ import { checkRateLimit, getClientIp, rateLimitResponse } from '@/lib/rate-limit
 export async function POST(request: Request) {
   // Rate limit: 10 logout attempts per minute per IP
   const ip = getClientIp(request)
-  const rl = checkRateLimit(`auth-logout:${ip}`, 10, 60 * 1000)
+  const rl = await checkRateLimit(`auth-logout:${ip}`, 10, 60 * 1000)
   if (!rl.allowed) return rateLimitResponse(rl.resetAt)
 
   const cookieStore = await cookies()

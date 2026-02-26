@@ -120,22 +120,28 @@ function memoryRateLimit(
 
 /**
  * Check if a key is within the allowed rate limit.
- * Uses in-memory rate limiting with the same signature as before.
- * For distributed Redis-backed rate limiting, use checkRateLimitAsync().
+ * Uses Upstash Redis when configured (production), falls back to
+ * in-memory for development / single-instance deployments.
  *
  * @param key       Unique key (e.g. IP + route)
  * @param limit     Max allowed requests in the window
  * @param windowMs  Window duration in milliseconds
  * @returns { allowed: boolean, remaining: number, resetAt: number }
  */
-export function checkRateLimit(
+export async function checkRateLimit(
   key: string,
   limit: number,
   windowMs: number
-): { allowed: boolean; remaining: number; resetAt: number } {
-  // Synchronous path always uses in-memory for instant response.
-  // For distributed enforcement, use checkRateLimitAsync() which
-  // queries Upstash Redis when configured.
+): Promise<{ allowed: boolean; remaining: number; resetAt: number }> {
+  if (USE_REDIS) {
+    const limiter = getUpstashLimiter(limit, windowMs)
+    const result = await limiter.limit(key)
+    return {
+      allowed: result.success,
+      remaining: result.remaining,
+      resetAt: result.reset,
+    }
+  }
   return memoryRateLimit(key, limit, windowMs)
 }
 

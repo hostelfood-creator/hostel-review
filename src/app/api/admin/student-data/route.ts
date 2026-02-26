@@ -95,7 +95,7 @@ function parseXlsx(buffer: Buffer): StudentRow[] {
 
 export async function POST(request: Request) {
   const ip = getClientIp(request)
-  const rl = checkRateLimit(`student-data-upload:${ip}`, 5, 15 * 60 * 1000)
+  const rl = await checkRateLimit(`student-data-upload:${ip}`, 5, 15 * 60 * 1000)
   if (!rl.allowed) return rateLimitResponse(rl.resetAt)
 
   try {
@@ -192,7 +192,7 @@ export async function POST(request: Request) {
  */
 export async function GET(request: Request) {
   const ip = getClientIp(request)
-  const rl = checkRateLimit(`student-data-info:${ip}`, 30, 60 * 1000)
+  const rl = await checkRateLimit(`student-data-info:${ip}`, 30, 60 * 1000)
   if (!rl.allowed) return rateLimitResponse(rl.resetAt)
 
   try {

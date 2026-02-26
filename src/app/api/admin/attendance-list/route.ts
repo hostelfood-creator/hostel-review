@@ -29,7 +29,7 @@ function getISTDate() {
  */
 export async function GET(request: Request) {
   const ip = getClientIp(request)
-  const rl = checkRateLimit(`admin-attendance-list:${ip}`, 20, 60 * 1000)
+  const rl = await checkRateLimit(`admin-attendance-list:${ip}`, 20, 60 * 1000)
   if (!rl.allowed) return rateLimitResponse(rl.resetAt)
 
   try {

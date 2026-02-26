@@ -10,7 +10,7 @@ export async function GET(request: Request) {
     try {
         // Rate limit: 30 reads per minute per IP
         const ip = getClientIp(request)
-        const rl = checkRateLimit(`complaints-get:${ip}`, 30, 60 * 1000)
+        const rl = await checkRateLimit(`complaints-get:${ip}`, 30, 60 * 1000)
         if (!rl.allowed) return rateLimitResponse(rl.resetAt)
 
         const supabase = await createClient()
@@ -150,7 +150,7 @@ export async function POST(request: Request) {
     try {
         // Rate limit: 5 complaints per hour per IP
         const ip = getClientIp(request)
-        const rl = checkRateLimit(`complaints-post:${ip}`, 5, 60 * 60 * 1000)
+        const rl = await checkRateLimit(`complaints-post:${ip}`, 5, 60 * 60 * 1000)
         if (!rl.allowed) return rateLimitResponse(rl.resetAt)
 
         const supabase = await createClient()
@@ -218,7 +218,7 @@ export async function PATCH(request: Request) {
     try {
         // Rate limit: 20 updates per minute per IP
         const ip = getClientIp(request)
-        const rl = checkRateLimit(`complaints-patch:${ip}`, 20, 60 * 1000)
+        const rl = await checkRateLimit(`complaints-patch:${ip}`, 20, 60 * 1000)
         if (!rl.allowed) return rateLimitResponse(rl.resetAt)
 
         const supabase = await createClient()

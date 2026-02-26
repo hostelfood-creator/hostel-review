@@ -7,7 +7,7 @@ import { checkRateLimit, getClientIp, rateLimitResponse } from '@/lib/rate-limit
 export async function POST(request: Request) {
   try {
     const ip = getClientIp(request)
-    const rl = checkRateLimit(`review-reply:${ip}`, 20, 60 * 1000)
+    const rl = await checkRateLimit(`review-reply:${ip}`, 20, 60 * 1000)
     if (!rl.allowed) return rateLimitResponse(rl.resetAt)
 
     const supabase = await createClient()

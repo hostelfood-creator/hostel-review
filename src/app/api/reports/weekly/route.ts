@@ -6,7 +6,7 @@ export async function GET(request: Request) {
     try {
         // Rate limit: 10 report requests per minute per IP
         const ip = getClientIp(request)
-        const rl = checkRateLimit(`reports-weekly:${ip}`, 10, 60 * 1000)
+        const rl = await checkRateLimit(`reports-weekly:${ip}`, 10, 60 * 1000)
         if (!rl.allowed) return rateLimitResponse(rl.resetAt)
 
         const supabase = await createClient()
@@ -60,83 +60,92 @@ export async function GET(request: Request) {
             blockUserIds = (blockUsers || []).map((u: { id: string }) => u.id)
         }
 
+        // Calculate the overall date range and compute week boundaries
+        const weekBoundaries: { startStr: string; endStr: string }[] = []
         for (let i = 0; i < weeks; i++) {
             const weekEnd = new Date(now)
             weekEnd.setDate(weekEnd.getDate() - (i * 7))
             const weekStart = new Date(weekEnd)
             weekStart.setDate(weekStart.getDate() - 7)
+            weekBoundaries.push({
+                startStr: weekStart.toISOString().split('T')[0],
+                endStr: weekEnd.toISOString().split('T')[0],
+            })
+        }
 
-            const startStr = weekStart.toISOString().split('T')[0]
-            const endStr = weekEnd.toISOString().split('T')[0]
+        // Single bulk query for all reviews across the entire date range (eliminates N+1)
+        const globalStart = weekBoundaries[weekBoundaries.length - 1].startStr
+        const globalEnd = weekBoundaries[0].endStr
 
-            let query = supabase
+        if (blockUserIds !== null && blockUserIds.length === 0) {
+            // No students in this block — all weeks are empty
+            for (const { startStr, endStr } of weekBoundaries) {
+                weeklyData.push({
+                    weekLabel: `${startStr} to ${endStr}`,
+                    totalReviews: 0, avgRating: 0, positive: 0, neutral: 0, negative: 0,
+                    mealBreakdown: {},
+                })
+            }
+        } else {
+            let bulkQuery = supabase
                 .from('reviews')
                 .select('rating, sentiment, meal_type, date')
-                .gte('date', startStr)
-                .lte('date', endStr)
+                .gte('date', globalStart)
+                .lte('date', globalEnd)
 
-            if (blockUserIds !== null) {
-                if (blockUserIds.length > 0) {
-                    query = query.in('user_id', blockUserIds)
-                } else {
+            if (blockUserIds !== null && blockUserIds.length > 0) {
+                bulkQuery = bulkQuery.in('user_id', blockUserIds)
+            }
+
+            const { data: allReviews } = await bulkQuery
+
+            // Group reviews into week buckets in-memory
+            for (const { startStr, endStr } of weekBoundaries) {
+                const reviews = (allReviews || []).filter(
+                    (r) => r.date >= startStr && r.date <= endStr
+                )
+
+                if (reviews.length === 0) {
                     weeklyData.push({
                         weekLabel: `${startStr} to ${endStr}`,
-                        totalReviews: 0,
-                        avgRating: 0,
-                        positive: 0,
-                        neutral: 0,
-                        negative: 0,
+                        totalReviews: 0, avgRating: 0, positive: 0, neutral: 0, negative: 0,
                         mealBreakdown: {},
                     })
                     continue
                 }
-            }
 
-            const { data: reviews } = await query
+                // Single-pass aggregation
+                let ratingSum = 0
+                let positive = 0, neutral = 0, negative = 0
+                const mealGroups = new Map<string, { sum: number; count: number }>()
 
-            if (!reviews || reviews.length === 0) {
+                for (const r of reviews) {
+                    ratingSum += r.rating
+                    if (r.sentiment === 'positive') positive++
+                    else if (r.sentiment === 'negative') negative++
+                    else neutral++
+
+                    const mg = mealGroups.get(r.meal_type)
+                    if (mg) { mg.sum += r.rating; mg.count++ }
+                    else mealGroups.set(r.meal_type, { sum: r.rating, count: 1 })
+                }
+
+                const mealBreakdown: Record<string, { count: number; avgRating: number }> = {}
+                mealGroups.forEach(({ sum, count }, meal) => {
+                    mealBreakdown[meal] = {
+                        count,
+                        avgRating: Math.round((sum / count) * 100) / 100,
+                    }
+                })
+
                 weeklyData.push({
                     weekLabel: `${startStr} to ${endStr}`,
-                    totalReviews: 0,
-                    avgRating: 0,
-                    positive: 0,
-                    neutral: 0,
-                    negative: 0,
-                    mealBreakdown: {},
+                    totalReviews: reviews.length,
+                    avgRating: Math.round((ratingSum / reviews.length) * 100) / 100,
+                    positive, neutral, negative,
+                    mealBreakdown,
                 })
-                continue
             }
-
-            const totalReviews = reviews.length
-            const avgRating = Math.round((reviews.reduce((s, r) => s + r.rating, 0) / totalReviews) * 100) / 100
-            const positive = reviews.filter((r) => r.sentiment === 'positive').length
-            const neutral = reviews.filter((r) => r.sentiment === 'neutral').length
-            const negative = reviews.filter((r) => r.sentiment === 'negative').length
-
-            // Meal breakdown
-            const mealBreakdown: Record<string, { count: number; avgRating: number }> = {}
-            const mealGroups = new Map<string, number[]>()
-            reviews.forEach((r) => {
-                const list = mealGroups.get(r.meal_type) || []
-                list.push(r.rating)
-                mealGroups.set(r.meal_type, list)
-            })
-            mealGroups.forEach((ratings, meal) => {
-                mealBreakdown[meal] = {
-                    count: ratings.length,
-                    avgRating: Math.round((ratings.reduce((s, v) => s + v, 0) / ratings.length) * 100) / 100,
-                }
-            })
-
-            weeklyData.push({
-                weekLabel: `${startStr} to ${endStr}`,
-                totalReviews,
-                avgRating,
-                positive,
-                neutral,
-                negative,
-                mealBreakdown,
-            })
         }
 
         // Complaint stats for the period

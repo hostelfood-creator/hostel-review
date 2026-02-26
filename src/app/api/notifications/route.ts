@@ -29,7 +29,7 @@ export async function GET(request: Request) {
     try {
         // Rate limit: 30 notification requests per minute per IP
         const ip = getClientIp(request)
-        const rl = checkRateLimit(`notifications:${ip}`, 30, 60 * 1000)
+        const rl = await checkRateLimit(`notifications:${ip}`, 30, 60 * 1000)
         if (!rl.allowed) return rateLimitResponse(rl.resetAt)
 
         const supabase = await createClient()

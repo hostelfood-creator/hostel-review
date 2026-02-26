@@ -13,7 +13,7 @@ const DEFAULT_MEAL_TIMINGS = {
 /** GET — Public endpoint for current meal timings (used by student check-in pages) */
 export async function GET(request: Request) {
   const ip = getClientIp(request)
-  const rl = checkRateLimit(`meal-timings-public:${ip}`, 30, 60 * 1000)
+  const rl = await checkRateLimit(`meal-timings-public:${ip}`, 30, 60 * 1000)
   if (!rl.allowed) return rateLimitResponse(rl.resetAt)
 
   try {

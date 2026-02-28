@@ -122,7 +122,7 @@ export const Turnstile = forwardRef<TurnstileRef, TurnstileProps>(
           console.error('[Turnstile] Widget error:', errorCode)
           onErrorRef.current?.(errorCode)
         },
-        size: 'invisible',
+        size: 'compact',
         execution: 'render',
         retry: 'auto',
         'retry-interval': 3000,

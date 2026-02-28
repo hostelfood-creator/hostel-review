@@ -186,6 +186,10 @@ USE_REDIS=true
 UPSTASH_REDIS_REST_URL=https://your-redis.upstash.io
 UPSTASH_REDIS_REST_TOKEN=your-redis-token
 
+# ── Cloudflare Turnstile (Bot Protection) ────────
+NEXT_PUBLIC_TURNSTILE_SITE_KEY=your-turnstile-site-key
+TURNSTILE_SECRET_KEY=your-turnstile-secret-key
+
 # ── Email (Nodemailer — for password reset OTP) ─
 SMTP_HOST=smtp.gmail.com
 SMTP_PORT=587
@@ -203,6 +207,8 @@ SMTP_FROM=noreply@yourdomain.com
 | `USE_REDIS` | No | Enable Upstash Redis rate limiter (`true`/`false`) |
 | `UPSTASH_REDIS_REST_URL` | No | Upstash Redis REST endpoint |
 | `UPSTASH_REDIS_REST_TOKEN` | No | Upstash Redis auth token |
+| `NEXT_PUBLIC_TURNSTILE_SITE_KEY` | No | Cloudflare Turnstile site key (public) |
+| `TURNSTILE_SECRET_KEY` | No | Cloudflare Turnstile secret key (server-only) |
 | `SMTP_HOST` | No | SMTP server for password reset emails |
 | `SMTP_PORT` | No | SMTP port (587 for TLS) |
 | `SMTP_USER` | No | SMTP username |
@@ -320,6 +326,7 @@ The application implements production-grade security:
 | **Security Headers** | X-Frame-Options: DENY, X-Content-Type-Options: nosniff, Referrer-Policy, Permissions-Policy |
 | **Password Security** | Bcrypt hashing via Supabase Auth; minimum 8 characters enforced |
 | **Session Management** | Remember Me = persistent session; unchecked = session cookie |
+| **Bot Protection** | Cloudflare Turnstile invisible challenge on login, register, and password reset |
 | **Cloudflare Ready** | `cf-connecting-ip` header support for real client IP behind CDN |
 
 ---

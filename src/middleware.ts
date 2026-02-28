@@ -28,8 +28,8 @@ export async function middleware(request: NextRequest) {
   // We do NOT use 'strict-dynamic' because Next.js injects framework scripts without nonces.
   const isProd = process.env.NODE_ENV === 'production'
   const scriptSrc = isProd
-    ? `script-src 'self' 'nonce-${nonce}' 'unsafe-inline'`
-    : `script-src 'self' 'unsafe-inline' 'unsafe-eval'`
+    ? `script-src 'self' 'nonce-${nonce}' 'unsafe-inline' https://challenges.cloudflare.com`
+    : `script-src 'self' 'unsafe-inline' 'unsafe-eval' https://challenges.cloudflare.com`
 
   const cspDirectives = [
     "default-src 'self'",
@@ -38,7 +38,8 @@ export async function middleware(request: NextRequest) {
     "style-src-elem 'self' 'unsafe-inline' https://fonts.googleapis.com",
     "font-src 'self' data: https://fonts.gstatic.com",
     "img-src 'self' blob: data: https://freeimage.host https://iili.io https://api.qrserver.com",
-    "connect-src 'self' https://*.supabase.co wss://*.supabase.co",
+    "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://challenges.cloudflare.com",
+    "frame-src https://challenges.cloudflare.com",
     "frame-ancestors 'none'",
     "base-uri 'self'",
     "form-action 'self'",

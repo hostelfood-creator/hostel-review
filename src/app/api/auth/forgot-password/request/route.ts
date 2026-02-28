@@ -3,6 +3,7 @@ import crypto from 'crypto'
 import { checkRateLimitAsync, getClientIp, rateLimitResponse } from '@/lib/rate-limit'
 import { getTransporter, getSender } from '@/lib/email'
 import { createServiceClient } from '@/lib/supabase/service'
+import { verifyTurnstileToken } from '@/lib/turnstile'
 
 // Fully responsive institutional email — works on Gmail, Outlook, Apple Mail, and mobile
 function buildOtpEmail(name: string, registerId: string, otp: string): string {
@@ -176,6 +177,17 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json()
+    const { turnstileToken } = body
+
+    // Verify Cloudflare Turnstile bot protection
+    const turnstileValid = await verifyTurnstileToken(turnstileToken, ip)
+    if (!turnstileValid) {
+      return NextResponse.json(
+        { error: 'Bot verification failed. Please refresh and try again.' },
+        { status: 403 }
+      )
+    }
+
     const rawId = body.email || body.registerId
     if (!rawId) {
       return NextResponse.json({ error: 'Email address is required' }, { status: 400 })

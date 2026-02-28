@@ -5,6 +5,7 @@ import { checkRateLimitAsync, getClientIp, rateLimitResponse } from '@/lib/rate-
 import { lookupStudent } from '@/lib/student-lookup'
 import { sendWelcomeEmail } from '@/lib/email'
 import { createServiceClient } from '@/lib/supabase/service'
+import { verifyTurnstileToken } from '@/lib/turnstile'
 
 // ── Input validation helpers ──────────────────────────────
 function validateRegistrationInput(body: Record<string, unknown>) {
@@ -53,7 +54,16 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: validation.error }, { status: validation.status })
     }
     const { cleanId, cleanName, cleanEmail, cleanPass } = validation
-    const { hostelBlock, department, year } = body
+    const { hostelBlock, department, year, turnstileToken } = body
+
+    // Verify Cloudflare Turnstile bot protection
+    const turnstileValid = await verifyTurnstileToken(turnstileToken, ip)
+    if (!turnstileValid) {
+      return NextResponse.json(
+        { error: 'Bot verification failed. Please refresh and try again.' },
+        { status: 403 }
+      )
+    }
 
     // Server-side verification — if the register ID is in university records,
     // enforce the official name and auto-assign hostel/dept/year to prevent spoofing

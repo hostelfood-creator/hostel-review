@@ -3,6 +3,7 @@ import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { checkRateLimitAsync, getClientIp, rateLimitResponse } from '@/lib/rate-limit'
 import { createServiceClient } from '@/lib/supabase/service'
+import { verifyTurnstileToken } from '@/lib/turnstile'
 
 export async function POST(request: Request) {
   // Rate limit: 10 attempts per 15 minutes per IP (Redis-backed in production)
@@ -12,8 +13,17 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json()
-    const { registerId, password, rememberMe } = body
+    const { registerId, password, rememberMe, turnstileToken } = body
     const extendSession = rememberMe === true
+
+    // Verify Cloudflare Turnstile bot protection
+    const turnstileValid = await verifyTurnstileToken(turnstileToken, ip)
+    if (!turnstileValid) {
+      return NextResponse.json(
+        { error: 'Bot verification failed. Please refresh and try again.' },
+        { status: 403 }
+      )
+    }
 
     if (!registerId || !password) {
       return NextResponse.json(

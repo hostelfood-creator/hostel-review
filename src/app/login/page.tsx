@@ -17,6 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { OtpInput } from '@/components/ui/otp-input'
 import { motion } from 'framer-motion'
 import { UserGuide } from '@/components/user-guide'
+import { Turnstile } from '@/components/turnstile'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -34,6 +35,7 @@ export default function LoginPage() {
   const [fieldsLocked, setFieldsLocked] = useState(false)
   const [emailLocked, setEmailLocked] = useState(false)
   const [lookingUpName, setLookingUpName] = useState(false)
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null)
   const lookupTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const [form, setForm] = useState({
@@ -180,7 +182,7 @@ export default function LoginPage() {
       const res = await fetch('/api/auth/forgot-password/request', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: emailVal })
+        body: JSON.stringify({ email: emailVal, turnstileToken })
       })
       const data = await res.json()
       if (res.status === 404) {
@@ -250,8 +252,8 @@ export default function LoginPage() {
     try {
       const endpoint = isRegister ? '/api/auth/register' : '/api/auth/login'
       const body = isRegister
-        ? form
-        : { registerId: form.registerId, password: form.password, rememberMe }
+        ? { ...form, turnstileToken }
+        : { registerId: form.registerId, password: form.password, rememberMe, turnstileToken }
 
       const res = await fetch(endpoint, {
         method: 'POST',
@@ -362,6 +364,12 @@ export default function LoginPage() {
           />
         ))}
       </div>
+
+      {/* Cloudflare Turnstile — invisible bot protection */}
+      <Turnstile
+        onVerify={(token) => setTurnstileToken(token)}
+        onExpire={() => setTurnstileToken(null)}
+      />
 
       {/* Theme Toggle */}
       <div className="fixed top-4 right-4 z-50">

@@ -135,6 +135,9 @@ export const Turnstile = forwardRef<TurnstileRef, TurnstileProps>(
     // Don't render anything visible — the widget is invisible
     if (!siteKey) return null
 
-    return <div ref={containerRef} className="hidden" />
+    // IMPORTANT: Do NOT use display:none (className="hidden").
+    // Cloudflare Turnstile needs the container in the DOM layout
+    // to render its iframe. The widget itself is already invisible.
+    return <div ref={containerRef} style={{ position: 'absolute', width: 0, height: 0, overflow: 'hidden' }} />
   }
 )

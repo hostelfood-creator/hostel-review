@@ -177,6 +177,10 @@ export default function LoginPage() {
       setFieldErrors({ forgotEmail: 'Enter your @kanchiuniv.ac.in college email' })
       return
     }
+    if (!turnstileToken) {
+      toast.error('Bot verification loading — please wait a moment and try again.')
+      return
+    }
     setLoading(true)
     setError('')
     try {
@@ -250,6 +254,11 @@ export default function LoginPage() {
     setError('')
 
     if (!validate()) return
+
+    if (!turnstileToken) {
+      toast.error('Bot verification loading — please wait a moment and try again.')
+      return
+    }
 
     setLoading(true)
 

@@ -16,6 +16,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { OtpInput } from '@/components/ui/otp-input'
 import { motion } from 'framer-motion'
+import { UserGuide } from '@/components/user-guide'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -789,18 +790,28 @@ export default function LoginPage() {
           </Card>
         </BlurFade>
 
-        {/* Social proof counter */}
+        {/* Social proof counter & User Guide */}
         <BlurFade delay={0.4} inView>
-          <p className="text-center text-muted-foreground text-sm mt-6 select-none">
-            <motion.span
+          <div className="mt-6 space-y-3">
+            <p className="text-center text-muted-foreground text-sm select-none">
+              <motion.span
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.8, duration: 0.5 }}
+                className="inline-block"
+              >
+                🎓 <span className="font-semibold text-foreground">1,100+</span> students already registered
+              </motion.span>
+            </p>
+            <motion.div
               initial={{ opacity: 0, y: 6 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.8, duration: 0.5 }}
-              className="inline-block"
+              transition={{ delay: 1.0, duration: 0.5 }}
+              className="flex justify-center"
             >
-              🎓 <span className="font-semibold text-foreground">1,100+</span> students already registered
-            </motion.span>
-          </p>
+              <UserGuide />
+            </motion.div>
+          </div>
         </BlurFade>
       </div>
     </div>

@@ -17,7 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { OtpInput } from '@/components/ui/otp-input'
 import { motion } from 'framer-motion'
 import { UserGuide } from '@/components/user-guide'
-import { Turnstile } from '@/components/turnstile'
+import { Turnstile, type TurnstileRef } from '@/components/turnstile'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -36,6 +36,7 @@ export default function LoginPage() {
   const [emailLocked, setEmailLocked] = useState(false)
   const [lookingUpName, setLookingUpName] = useState(false)
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null)
+  const turnstileRef = useRef<TurnstileRef>(null)
   const lookupTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const [form, setForm] = useState({
@@ -198,6 +199,9 @@ export default function LoginPage() {
       toast.error(err.message)
     } finally {
       setLoading(false)
+      // Reset Turnstile widget — tokens are single-use
+      setTurnstileToken(null)
+      turnstileRef.current?.reset()
     }
   }
 
@@ -289,6 +293,9 @@ export default function LoginPage() {
       toast.error('Network error. Please check your connection.')
     } finally {
       setLoading(false)
+      // Reset Turnstile widget — tokens are single-use
+      setTurnstileToken(null)
+      turnstileRef.current?.reset()
     }
   }
 
@@ -367,6 +374,7 @@ export default function LoginPage() {
 
       {/* Cloudflare Turnstile — invisible bot protection */}
       <Turnstile
+        ref={turnstileRef}
         onVerify={(token) => setTurnstileToken(token)}
         onExpire={() => setTurnstileToken(null)}
       />

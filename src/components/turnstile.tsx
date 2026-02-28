@@ -1,11 +1,14 @@
 'use client'
 
-import { useEffect, useRef, useCallback } from 'react'
+import { useEffect, useRef, useCallback, useImperativeHandle, forwardRef } from 'react'
 
 /**
  * Cloudflare Turnstile invisible widget component.
  * Loads the Turnstile script and renders an invisible challenge.
  * Calls `onVerify` with the token when verification succeeds.
+ *
+ * Exposes a `reset()` method via ref so the parent can request a fresh
+ * token after each form submission (Turnstile tokens are single-use).
  *
  * @see https://developers.cloudflare.com/turnstile/get-started/client-side-rendering/
  */
@@ -20,6 +23,10 @@ declare global {
     }
     onTurnstileLoad?: () => void
   }
+}
+
+export interface TurnstileRef {
+  reset: () => void
 }
 
 interface TurnstileProps {
@@ -60,61 +67,74 @@ function loadTurnstileScript(): Promise<void> {
   })
 }
 
-export function Turnstile({ onVerify, onExpire, onError }: TurnstileProps) {
-  const containerRef = useRef<HTMLDivElement>(null)
-  const widgetIdRef = useRef<string | null>(null)
-  const onVerifyRef = useRef(onVerify)
-  const onExpireRef = useRef(onExpire)
-  const onErrorRef = useRef(onError)
+export const Turnstile = forwardRef<TurnstileRef, TurnstileProps>(
+  function Turnstile({ onVerify, onExpire, onError }, ref) {
+    const containerRef = useRef<HTMLDivElement>(null)
+    const widgetIdRef = useRef<string | null>(null)
+    const onVerifyRef = useRef(onVerify)
+    const onExpireRef = useRef(onExpire)
+    const onErrorRef = useRef(onError)
 
-  // Keep refs in sync without re-rendering the widget
-  onVerifyRef.current = onVerify
-  onExpireRef.current = onExpire
-  onErrorRef.current = onError
+    // Keep refs in sync without re-rendering the widget
+    onVerifyRef.current = onVerify
+    onExpireRef.current = onExpire
+    onErrorRef.current = onError
 
-  const siteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY
+    const siteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY
 
-  const renderWidget = useCallback(async () => {
-    if (!siteKey || !containerRef.current) return
+    // Expose reset() to parent so single-use tokens can be refreshed
+    useImperativeHandle(ref, () => ({
+      reset: () => {
+        if (widgetIdRef.current && window.turnstile) {
+          try {
+            window.turnstile.reset(widgetIdRef.current)
+          } catch { /* widget may have been removed */ }
+        }
+      },
+    }), [])
 
-    await loadTurnstileScript()
+    const renderWidget = useCallback(async () => {
+      if (!siteKey || !containerRef.current) return
 
-    if (!window.turnstile || !containerRef.current) return
+      await loadTurnstileScript()
 
-    // Clean up previous widget if exists
-    if (widgetIdRef.current) {
-      try {
-        window.turnstile.remove(widgetIdRef.current)
-      } catch { /* already removed */ }
-      widgetIdRef.current = null
-    }
+      if (!window.turnstile || !containerRef.current) return
 
-    widgetIdRef.current = window.turnstile.render(containerRef.current, {
-      sitekey: siteKey,
-      callback: (token: string) => onVerifyRef.current(token),
-      'expired-callback': () => onExpireRef.current?.(),
-      'error-callback': () => onErrorRef.current?.(),
-      size: 'invisible',
-      retry: 'auto',
-      'retry-interval': 3000,
-    })
-  }, [siteKey])
-
-  useEffect(() => {
-    renderWidget()
-
-    return () => {
-      if (widgetIdRef.current && window.turnstile) {
+      // Clean up previous widget if exists
+      if (widgetIdRef.current) {
         try {
           window.turnstile.remove(widgetIdRef.current)
         } catch { /* already removed */ }
         widgetIdRef.current = null
       }
-    }
-  }, [renderWidget])
 
-  // Don't render anything visible — the widget is invisible
-  if (!siteKey) return null
+      widgetIdRef.current = window.turnstile.render(containerRef.current, {
+        sitekey: siteKey,
+        callback: (token: string) => onVerifyRef.current(token),
+        'expired-callback': () => onExpireRef.current?.(),
+        'error-callback': () => onErrorRef.current?.(),
+        size: 'invisible',
+        retry: 'auto',
+        'retry-interval': 3000,
+      })
+    }, [siteKey])
 
-  return <div ref={containerRef} className="hidden" />
-}
+    useEffect(() => {
+      renderWidget()
+
+      return () => {
+        if (widgetIdRef.current && window.turnstile) {
+          try {
+            window.turnstile.remove(widgetIdRef.current)
+          } catch { /* already removed */ }
+          widgetIdRef.current = null
+        }
+      }
+    }, [renderWidget])
+
+    // Don't render anything visible — the widget is invisible
+    if (!siteKey) return null
+
+    return <div ref={containerRef} className="hidden" />
+  }
+)

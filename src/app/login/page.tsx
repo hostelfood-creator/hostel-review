@@ -384,8 +384,15 @@ export default function LoginPage() {
       {/* Cloudflare Turnstile — invisible bot protection */}
       <Turnstile
         ref={turnstileRef}
-        onVerify={(token) => setTurnstileToken(token)}
+        onVerify={(token) => {
+          console.log('[Turnstile] Token set')
+          setTurnstileToken(token)
+        }}
         onExpire={() => setTurnstileToken(null)}
+        onError={(code) => {
+          console.error('[Turnstile] Error:', code)
+          setTurnstileToken(null)
+        }}
       />
 
       {/* Theme Toggle */}

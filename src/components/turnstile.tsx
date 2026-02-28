@@ -32,7 +32,7 @@ export interface TurnstileRef {
 interface TurnstileProps {
   onVerify: (token: string) => void
   onExpire?: () => void
-  onError?: () => void
+  onError?: (errorCode?: string) => void
 }
 
 // Track script loading globally to avoid duplicate script tags
@@ -110,10 +110,20 @@ export const Turnstile = forwardRef<TurnstileRef, TurnstileProps>(
 
       widgetIdRef.current = window.turnstile.render(containerRef.current, {
         sitekey: siteKey,
-        callback: (token: string) => onVerifyRef.current(token),
-        'expired-callback': () => onExpireRef.current?.(),
-        'error-callback': () => onErrorRef.current?.(),
+        callback: (token: string) => {
+          console.log('[Turnstile] Token received successfully')
+          onVerifyRef.current(token)
+        },
+        'expired-callback': () => {
+          console.warn('[Turnstile] Token expired — requesting fresh token')
+          onExpireRef.current?.()
+        },
+        'error-callback': (errorCode: string) => {
+          console.error('[Turnstile] Widget error:', errorCode)
+          onErrorRef.current?.(errorCode)
+        },
         size: 'invisible',
+        execution: 'render',
         retry: 'auto',
         'retry-interval': 3000,
       })
@@ -135,9 +145,22 @@ export const Turnstile = forwardRef<TurnstileRef, TurnstileProps>(
     // Don't render anything visible — the widget is invisible
     if (!siteKey) return null
 
-    // IMPORTANT: Do NOT use display:none (className="hidden").
-    // Cloudflare Turnstile needs the container in the DOM layout
-    // to render its iframe. The widget itself is already invisible.
-    return <div ref={containerRef} style={{ position: 'absolute', width: 0, height: 0, overflow: 'hidden' }} />
+    // Cloudflare Turnstile needs the container in the DOM with real
+    // dimensions — zero-size or display:none prevents the iframe from loading.
+    return (
+      <div
+        ref={containerRef}
+        style={{
+          position: 'fixed',
+          bottom: 0,
+          right: 0,
+          zIndex: -1,
+          opacity: 0.01,
+          pointerEvents: 'none',
+          width: 70,
+          height: 65,
+        }}
+      />
+    )
   }
 )

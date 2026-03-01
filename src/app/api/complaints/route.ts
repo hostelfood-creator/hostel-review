@@ -2,9 +2,25 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createServiceClient } from '@/lib/supabase/service'
 import { checkRateLimit, getClientIp, rateLimitResponse } from '@/lib/rate-limit'
+import { logAdminAction } from '@/lib/audit'
 
 const VALID_CATEGORIES = ['hygiene', 'taste', 'quantity', 'timing', 'other']
 const VALID_STATUSES = ['pending', 'in_progress', 'resolved']
+const VALID_PRIORITIES = ['low', 'normal', 'high', 'urgent']
+
+/** Calculate SLA deadline based on priority level */
+function calculateSlaDeadline(priority: string): string {
+    const now = new Date()
+    const hoursMap: Record<string, number> = {
+        urgent: 4,
+        high: 12,
+        normal: 48,
+        low: 96,
+    }
+    const hours = hoursMap[priority] || 48
+    now.setHours(now.getHours() + hours)
+    return now.toISOString()
+}
 
 export async function GET(request: Request) {
     try {
@@ -99,10 +115,12 @@ export async function GET(request: Request) {
         const enrichedComplaints = (complaints || []).map((c: {
             id: string; user_id: string; hostel_block: string; complaint_text: string;
             category: string; status: string; admin_reply: string | null;
-            replied_at: string | null; replied_by: string | null; created_at: string
+            replied_at: string | null; replied_by: string | null; created_at: string;
+            priority: string | null; sla_deadline: string | null; escalated: boolean | null; escalated_at: string | null
         }) => {
             const studentProfile = profileMap.get(c.user_id)
             const replierProfile = c.replied_by ? profileMap.get(c.replied_by) : null
+            const isOverdue = c.sla_deadline && c.status !== 'resolved' && new Date(c.sla_deadline) < new Date()
             return {
                 id: c.id,
                 userId: c.user_id,
@@ -110,6 +128,11 @@ export async function GET(request: Request) {
                 complaintText: c.complaint_text,
                 category: c.category,
                 status: c.status,
+                priority: c.priority || 'normal',
+                slaDeadline: c.sla_deadline,
+                escalated: c.escalated || isOverdue || false,
+                escalatedAt: c.escalated_at,
+                isOverdue: !!isOverdue,
                 adminReply: c.admin_reply,
                 repliedAt: c.replied_at,
                 repliedByName: replierProfile?.name || null,
@@ -177,6 +200,7 @@ export async function POST(request: Request) {
         const body = await request.json()
         const complaintText = (body.complaintText || '').trim()
         const category = body.category || 'other'
+        const priority = VALID_PRIORITIES.includes(body.priority) ? body.priority : 'normal'
 
         if (!complaintText) {
             return NextResponse.json({ error: 'Complaint text is required' }, { status: 400 })
@@ -190,6 +214,8 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Invalid category' }, { status: 400 })
         }
 
+        const slaDeadline = calculateSlaDeadline(priority)
+
         const { data: inserted, error } = await supabase
             .from('complaints')
             .insert({
@@ -198,6 +224,8 @@ export async function POST(request: Request) {
                 complaint_text: complaintText,
                 category,
                 status: 'pending',
+                priority,
+                sla_deadline: slaDeadline,
             })
             .select()
             .single()
@@ -239,7 +267,7 @@ export async function PATCH(request: Request) {
         }
 
         const body = await request.json()
-        const { complaintId, reply, status } = body
+        const { complaintId, reply, status, priority } = body
 
         if (!complaintId) {
             return NextResponse.json({ error: 'Complaint ID is required' }, { status: 400 })
@@ -283,6 +311,14 @@ export async function PATCH(request: Request) {
             updates.status = status
         }
 
+        if (priority !== undefined) {
+            if (!VALID_PRIORITIES.includes(priority)) {
+                return NextResponse.json({ error: 'Invalid priority' }, { status: 400 })
+            }
+            updates.priority = priority
+            updates.sla_deadline = calculateSlaDeadline(priority)
+        }
+
         if (Object.keys(updates).length === 0) {
             return NextResponse.json({ error: 'No valid fields to update' }, { status: 400 })
         }
@@ -296,6 +332,8 @@ export async function PATCH(request: Request) {
             console.error('Complaint update error:', error)
             return NextResponse.json({ error: 'Failed to update complaint' }, { status: 500 })
         }
+
+        logAdminAction(user.id, profile.role, 'complaint_update', 'complaint', complaintId as string, { status: updates.status, hasReply: !!updates.admin_reply }, ip)
 
         return NextResponse.json({ success: true })
     } catch (error) {

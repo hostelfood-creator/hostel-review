@@ -81,12 +81,23 @@ export default async function RootLayout({
         />
       </head>
       <body className="min-h-screen bg-background text-foreground font-sans antialiased transition-colors duration-200">
+        {/* Skip to main content link for keyboard/screen-reader users */}
+        <a
+          href="#main-content"
+          className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-[9999] focus:px-4 focus:py-2 focus:bg-primary focus:text-primary-foreground focus:rounded-md focus:text-sm focus:font-medium focus:outline-none focus:ring-2 focus:ring-ring"
+        >
+          Skip to main content
+        </a>
         <ThemeProvider>
           <I18nProvider>
             <PreloaderWrapper />
             <MaintenanceOverlay />
             <ServiceWorkerRegister />
-            {children}
+            <main id="main-content">
+              {children}
+            </main>
+            {/* ARIA live region for dynamic announcements */}
+            <div aria-live="polite" aria-atomic="true" className="sr-only" id="aria-live-announcer" />
             <ToasterProvider />
           </I18nProvider>
         </ThemeProvider>

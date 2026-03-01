@@ -14,6 +14,7 @@ import { toast } from 'sonner'
 import { motion, AnimatePresence } from 'framer-motion'
 import Link from 'next/link'
 import { useTranslation } from '@/lib/i18n'
+import { PullToRefresh } from '@/components/pull-to-refresh'
 
 
 interface MenuData {
@@ -277,6 +278,29 @@ export default function StudentDashboard() {
     loadData()
   }, [todayDate, userHostelBlock, initReviewState])
 
+  /** Pull-to-refresh: reload all dashboard data */
+  const refreshAll = useCallback(async () => {
+    await fetchServerTime()
+    // Re-fetch checkin status
+    try {
+      const res = await fetch('/api/checkin')
+      const d = await res.json()
+      if (d.checkins && d.currentMeal) {
+        const current = d.checkins.find((c: { meal_type: string }) => c.meal_type === d.currentMeal)
+        setCheckinStatus({ checkedIn: !!current, mealType: d.currentMeal, mealLabel: d.currentMealLabel })
+      }
+    } catch { /* ignore */ }
+    // Re-fetch weekly history
+    try {
+      const histRes = await fetch('/api/checkin/history?days=7')
+      const histData = await histRes.json()
+      if (histData.history) setWeeklyHistory(histData.history)
+      if (histData.summary) setWeeklyPercentage(histData.summary.percentage)
+    } catch { /* ignore */ }
+    // Menu + reviews will reload via todayDate change
+    toast.success('Dashboard refreshed')
+  }, [fetchServerTime])
+
   const setRating = (mealType: string, rating: number) => {
     if (reviews[mealType]?.submitted) return
     setReviews((prev) => ({
@@ -381,6 +405,7 @@ export default function StudentDashboard() {
   }
 
   return (
+    <PullToRefresh onRefresh={refreshAll}>
     <div className="px-5 lg:px-8 py-6">
       {/* Personalized Greeting with BlurFade */}
       <section className="mb-8">
@@ -735,5 +760,6 @@ export default function StudentDashboard() {
 
       <div className="h-8" />
     </div>
+    </PullToRefresh>
   )
 }

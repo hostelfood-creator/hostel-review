@@ -10,6 +10,7 @@ import { faUtensils, faClock, faUserCircle, faBell, faRightFromBracket, faCommen
 import { ThemeToggle } from '@/lib/theme'
 import { useTranslation } from '@/lib/i18n'
 import { LanguageSwitcher } from '@/components/language-switcher'
+import { WhatsNew } from '@/components/whats-new'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -45,17 +46,30 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
   const [showNotifications, setShowNotifications] = useState(false)
   const { t } = useTranslation()
 
-  // Read IDs from localStorage
+  // Read IDs from localStorage (fallback for offline)
   const getReadIds = (): string[] => {
     try {
       return JSON.parse(localStorage.getItem('notif_read_ids') || '[]')
     } catch { return [] }
   }
-  const markAllRead = (notifs: Notification[]) => {
-    const ids = notifs.map(n => n.id)
+  const markAllRead = async (notifs: Notification[]) => {
+    const ids = notifs.filter(n => !n.read).map(n => n.id)
+    if (ids.length === 0) {
+      setNotifications(notifs.map(n => ({ ...n, read: true })))
+      setUnreadCount(0)
+      return
+    }
+    // Update server-side read state
+    try {
+      await fetch('/api/notifications', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ notificationIds: ids }),
+      })
+    } catch { /* ignore — localStorage fallback below */ }
+    // Also update localStorage as offline fallback
     const existing = new Set(getReadIds())
     ids.forEach(id => existing.add(id))
-    // Keep only the latest 200 IDs to prevent unbounded growth
     const arr = [...existing].slice(-200)
     localStorage.setItem('notif_read_ids', JSON.stringify(arr))
     setNotifications(notifs.map(n => ({ ...n, read: true })))
@@ -67,10 +81,12 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
       const res = await fetch('/api/notifications')
       if (!res.ok) return
       const data = await res.json()
-      const readSet = new Set(getReadIds())
+      // Server now returns read state from notification_reads table
+      // Merge with localStorage fallback for offline-first behavior
+      const localReadSet = new Set(getReadIds())
       const notifs: Notification[] = (data.notifications || []).map((n: Notification) => ({
         ...n,
-        read: readSet.has(n.id),
+        read: n.read || localReadSet.has(n.id),
       }))
       setNotifications(notifs)
       setUnreadCount(notifs.filter(n => !n.read).length)
@@ -241,6 +257,7 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
                 </Badge>
               )}
               <LanguageSwitcher variant="compact" />
+              <WhatsNew variant="icon" />
               <ThemeToggle />
               <div className="relative">
                 <Button

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createServiceClient } from '@/lib/supabase/service'
 import { checkRateLimit, getClientIp, rateLimitResponse } from '@/lib/rate-limit'
+import { logAdminAction } from '@/lib/audit'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
 /**
@@ -252,5 +253,11 @@ export async function POST(request: Request) {
     }
 
     const result = await handler(supabase, body, user.id)
+
+    // Audit log super admin actions
+    if (!result.status || result.status === 200) {
+      logAdminAction(user.id, 'super_admin', `super_${action}`, action.includes('block') ? 'hostel_block' : 'admin_user', (body.id || body.registerId || '') as string, { action, ...body, password: undefined }, ip)
+    }
+
     return NextResponse.json(result.json, { status: result.status || 200 })
 }

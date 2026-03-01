@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createServiceClient } from '@/lib/supabase/service'
 import { checkRateLimit, getClientIp, rateLimitResponse } from '@/lib/rate-limit'
+import { logAdminAction } from '@/lib/audit'
 
 /** POST — Admin reply to a review */
 export async function POST(request: Request) {
@@ -83,6 +84,8 @@ export async function POST(request: Request) {
       console.error('Review reply error:', updateErr)
       return NextResponse.json({ error: 'Failed to save reply' }, { status: 500 })
     }
+
+    logAdminAction(user.id, profile.role, 'review_reply', 'review', reviewId as string, { replyLength: replyText.length }, ip)
 
     return NextResponse.json({ success: true })
   } catch (error) {

@@ -60,6 +60,8 @@ const Slider = React.forwardRef<
             <SliderPrimitive.Thumb
                 className="block h-5 w-5 rounded-full border-2 border-primary bg-background transition-colors focus-visible:outline focus-visible:outline-[3px] focus-visible:outline-ring/40 data-[disabled]:cursor-not-allowed"
                 onPointerDown={handlePointerDown}
+                aria-label={props['aria-label'] || `Slider value: ${value}`}
+                aria-valuetext={tooltipContent ? String(tooltipContent(value)) : `${value}`}
             />
         );
 

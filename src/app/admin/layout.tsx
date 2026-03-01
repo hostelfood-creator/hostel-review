@@ -7,10 +7,11 @@ import { ThemeToggle } from '@/lib/theme'
 import { useTranslation } from '@/lib/i18n'
 import { LanguageSwitcher } from '@/components/language-switcher'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { faUtensils, faChartLine, faMessage, faBars, faRightFromBracket, faCommentDots, faQrcode, faClipboardList, faFileLines } from '@fortawesome/free-solid-svg-icons'
+import { faUtensils, faChartLine, faMessage, faBars, faRightFromBracket, faCommentDots, faQrcode, faClipboardList, faFileLines, faUsers } from '@fortawesome/free-solid-svg-icons'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
+import { WhatsNew } from '@/components/whats-new'
 
 interface User {
   id: string
@@ -68,6 +69,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     { href: '/admin/attendance', icon: <FontAwesomeIcon icon={faQrcode} className="w-5 h-5" />, label: t.nav.attendance },
     { href: '/admin/attendance/list', icon: <FontAwesomeIcon icon={faClipboardList} className="w-5 h-5" />, label: t.nav.attendanceList },
     { href: '/admin/reports', icon: <FontAwesomeIcon icon={faFileLines} className="w-5 h-5" />, label: t.nav.reports },
+    { href: '/admin/users', icon: <FontAwesomeIcon icon={faUsers} className="w-5 h-5" />, label: 'Users' },
   ]
 
   // Add Super Admin specific features
@@ -135,6 +137,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               </Link>
             )
           })}
+          <WhatsNew variant="sidebar" />
         </nav>
 
         {/* User & Logout */}
@@ -178,6 +181,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             })}
           </span>
           <LanguageSwitcher variant="compact" />
+          <WhatsNew variant="icon" />
           <ThemeToggle />
         </header>
 

@@ -49,6 +49,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
       const saved = localStorage.getItem(STORAGE_KEY) as Locale | null
       if (saved && translations[saved]) {
         setLocaleState(saved)
+        document.documentElement.setAttribute('lang', saved)
       }
     } catch {
       // localStorage not available

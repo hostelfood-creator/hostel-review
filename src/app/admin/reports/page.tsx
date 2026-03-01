@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { faChartLine, faArrowTrendUp, faArrowTrendDown, faDownload, faCircleExclamation } from '@fortawesome/free-solid-svg-icons'
+import { faChartLine, faArrowTrendUp, faArrowTrendDown, faDownload, faCircleExclamation, faPrint } from '@fortawesome/free-solid-svg-icons'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -142,9 +142,13 @@ export default function AdminReportsPage() {
                             </SelectContent>
                         </Select>
                     )}
-                    <Button variant="outline" size="sm" onClick={handleExportCSV} className="rounded-full">
+                    <Button variant="outline" size="sm" onClick={handleExportCSV} className="rounded-full print-hide">
                         <FontAwesomeIcon icon={faDownload} className="w-3.5 h-3.5 mr-1.5" />
                         Export
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={() => window.print()} className="rounded-full print-hide">
+                        <FontAwesomeIcon icon={faPrint} className="w-3.5 h-3.5 mr-1.5" />
+                        Print
                     </Button>
                 </div>
             </div>

@@ -143,3 +143,152 @@ select option {
   --tooltip-border: rgba(255, 255, 255, 0.1);
   --tooltip-color: #ffffff;
 }
+
+/* ── Print Stylesheets ─────────────────────────────────────────────────────── */
+
+@media print {
+  /* Reset page setup */
+  @page {
+    size: A4 landscape;
+    margin: 1cm;
+  }
+
+  /* Force light theme for print */
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 0 0% 7%;
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 7%;
+    --muted-foreground: 0 0% 40%;
+    --border: 40 6% 88%;
+  }
+
+  body {
+    background: white !important;
+    color: black !important;
+    font-size: 11pt;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* Hide non-essential UI elements */
+  .print-hide,
+  nav,
+  aside,
+  header,
+  footer,
+  button:not(.print-show),
+  [role="dialog"],
+  [data-radix-popper-content-wrapper],
+  .no-scrollbar,
+  .animate-spin,
+  .animate-pulse {
+    display: none !important;
+  }
+
+  /* Show print-only elements */
+  .print-only {
+    display: block !important;
+  }
+
+  /* Ensure cards and content stay together */
+  .rounded-xl,
+  [class*="Card"] {
+    break-inside: avoid;
+    page-break-inside: avoid;
+    border: 1px solid #e4e4e7 !important;
+    box-shadow: none !important;
+  }
+
+  /* Make grids print-friendly */
+  .grid {
+    break-inside: avoid;
+  }
+
+  /* Ensure charts render well */
+  .recharts-wrapper {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  svg {
+    break-inside: avoid;
+    max-width: 100% !important;
+  }
+
+  /* Full width layout (no sidebar offset) */
+  .flex-1 {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  /* Fix table printing */
+  table {
+    break-inside: auto;
+  }
+  tr {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  thead {
+    display: table-header-group;
+  }
+
+  /* Ensure text is black */
+  * {
+    color: inherit !important;
+    text-shadow: none !important;
+  }
+
+  /* Style badges for print */
+  [class*="Badge"],
+  [class*="badge"] {
+    border: 1px solid #999 !important;
+    background: transparent !important;
+  }
+
+  /* Links */
+  a {
+    text-decoration: none !important;
+  }
+
+  /* Remove backdrop/overlays */
+  [class*="overlay"],
+  [class*="Overlay"],
+  .fixed {
+    display: none !important;
+  }
+
+  /* Print header */
+  .print-header {
+    display: block !important;
+    text-align: center;
+    margin-bottom: 16px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid #333;
+  }
+
+  .print-header h1 {
+    font-size: 18pt;
+    font-weight: bold;
+    margin: 0;
+  }
+
+  .print-header p {
+    font-size: 10pt;
+    color: #666;
+    margin: 4px 0 0;
+  }
+
+  /* Scrollbar resets for print */
+  ::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Overflow visible for print */
+  .overflow-y-auto,
+  .overflow-x-auto,
+  .overflow-hidden {
+    overflow: visible !important;
+  }
+}

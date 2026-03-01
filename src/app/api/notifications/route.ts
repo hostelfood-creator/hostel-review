@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { createServiceClient } from '@/lib/supabase/service'
 import { checkRateLimit, getClientIp, rateLimitResponse } from '@/lib/rate-limit'
 import { getISTDate } from '@/lib/time'
 import type { SupabaseClient } from '@supabase/supabase-js'
@@ -179,7 +180,7 @@ export async function GET(request: Request) {
         }
 
         // Build notifications based on role
-        // Read tracking is handled client-side via localStorage to avoid URL length issues
+        // Read tracking: server-side via notification_reads table (with localStorage fallback on client)
         const notifications: Notification[] = []
 
         // ── Welcome notification for newly registered users (within 7 days) ──
@@ -207,9 +208,70 @@ export async function GET(request: Request) {
             notifications.push(...await buildAdminNotifications(supabase, profile))
         }
 
+        // Mark read notifications using server-side notification_reads table
+        const serviceDb = createServiceClient()
+        const notifIds = notifications.map(n => n.id)
+        if (notifIds.length > 0) {
+            const { data: readEntries } = await serviceDb
+                .from('notification_reads')
+                .select('notification_id')
+                .eq('user_id', user.id)
+                .in('notification_id', notifIds)
+
+            const readSet = new Set((readEntries || []).map(r => r.notification_id))
+            for (const n of notifications) {
+                n.read = readSet.has(n.id)
+            }
+        }
+
         return NextResponse.json({ notifications })
     } catch (error) {
         console.error('Notifications error:', error)
+        return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    }
+}
+
+/**
+ * POST — Mark notifications as read (server-side)
+ * Body: { notificationIds: string[] }
+ */
+export async function POST(request: Request) {
+    try {
+        const ip = getClientIp(request)
+        const rl = await checkRateLimit(`notifications-read:${ip}`, 30, 60 * 1000)
+        if (!rl.allowed) return rateLimitResponse(rl.resetAt)
+
+        const supabase = await createClient()
+        const { data: { user } } = await supabase.auth.getUser()
+
+        if (!user) {
+            return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
+        }
+
+        const body = await request.json()
+        const notificationIds: string[] = body.notificationIds
+
+        if (!Array.isArray(notificationIds) || notificationIds.length === 0) {
+            return NextResponse.json({ error: 'notificationIds array is required' }, { status: 400 })
+        }
+
+        // Limit to 50 per call to prevent abuse
+        const ids = notificationIds.slice(0, 50)
+
+        const serviceDb = createServiceClient()
+        const rows = ids.map(id => ({
+            user_id: user.id,
+            notification_id: id,
+        }))
+
+        // Upsert to avoid duplicate key errors
+        await serviceDb
+            .from('notification_reads')
+            .upsert(rows, { onConflict: 'user_id,notification_id', ignoreDuplicates: true })
+
+        return NextResponse.json({ success: true, marked: ids.length })
+    } catch (error) {
+        console.error('Notification mark-read error:', error)
         return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
     }
 }

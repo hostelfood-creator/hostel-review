@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createServiceClient } from '@/lib/supabase/service'
 import { checkRateLimit, getClientIp, rateLimitResponse } from '@/lib/rate-limit'
+import { logAdminAction } from '@/lib/audit'
 
 export async function GET(request: Request) {
     try {
@@ -94,6 +95,8 @@ export async function POST(request: Request) {
             console.error('Maintenance Update Error:', error)
             return NextResponse.json({ error: 'Failed to update maintenance mode' }, { status: 500 })
         }
+
+        logAdminAction(user.id, 'super_admin', 'maintenance_toggle', 'site_settings', '1', { maintenance_mode }, ip)
 
         return NextResponse.json({ success: true, maintenance_mode })
     } catch (err) {

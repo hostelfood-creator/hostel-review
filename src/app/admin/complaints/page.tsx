@@ -5,7 +5,8 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import {
     faCommentDots, faClock, faIdCard, faUser, faBuilding,
     faHourglassHalf, faSpinner, faCheckCircle, faReply, faPaperPlane, faDownload,
-    faBroom, faUtensils, faScaleBalanced, faStopwatch, faPenToSquare
+    faBroom, faUtensils, faScaleBalanced, faStopwatch, faPenToSquare,
+    faTriangleExclamation, faArrowUp, faFireFlameCurved
 } from '@fortawesome/free-solid-svg-icons'
 import { createClient } from '@/lib/supabase/client'
 import { Card, CardContent } from '@/components/ui/card'
@@ -22,6 +23,10 @@ interface Complaint {
     complaintText: string
     category: string
     status: string
+    priority: string
+    slaDeadline: string | null
+    escalated: boolean
+    isOverdue: boolean
     adminReply: string | null
     repliedAt: string | null
     repliedByName: string | null
@@ -44,12 +49,33 @@ const STATUS_CONFIG: Record<string, { label: string; variant: 'secondary' | 'war
     resolved: { label: 'Resolved', variant: 'success', icon: faCheckCircle },
 }
 
+const PRIORITY_CONFIG: Record<string, { label: string; color: string; icon: typeof faArrowUp }> = {
+    low: { label: 'Low', color: 'text-muted-foreground bg-muted', icon: faArrowUp },
+    normal: { label: 'Normal', color: 'text-blue-700 bg-blue-50 dark:text-blue-400 dark:bg-blue-500/10', icon: faArrowUp },
+    high: { label: 'High', color: 'text-orange-700 bg-orange-50 dark:text-orange-400 dark:bg-orange-500/10', icon: faTriangleExclamation },
+    urgent: { label: 'Urgent', color: 'text-red-700 bg-red-50 dark:text-red-400 dark:bg-red-500/10', icon: faFireFlameCurved },
+}
+
+function formatSlaRemaining(deadline: string | null): string | null {
+    if (!deadline) return null
+    const now = new Date()
+    const dl = new Date(deadline)
+    const diffMs = dl.getTime() - now.getTime()
+    if (diffMs <= 0) return 'OVERDUE'
+    const hours = Math.floor(diffMs / (1000 * 60 * 60))
+    const mins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60))
+    if (hours >= 24) return `${Math.floor(hours / 24)}d ${hours % 24}h left`
+    if (hours > 0) return `${hours}h ${mins}m left`
+    return `${mins}m left`
+}
+
 export default function AdminComplaintsPage() {
     const [complaints, setComplaints] = useState<Complaint[]>([])
     const [loading, setLoading] = useState(true)
     const [blockFilter, setBlockFilter] = useState('all')
     const [statusFilter, setStatusFilter] = useState('all')
     const [categoryFilter, setCategoryFilter] = useState('all')
+    const [priorityFilter, setPriorityFilter] = useState('all')
     const [hostelBlocks, setHostelBlocks] = useState<string[]>([])
     const [userRole, setUserRole] = useState('')
 
@@ -75,7 +101,7 @@ export default function AdminComplaintsPage() {
         } finally {
             setLoading(false)
         }
-    }, [blockFilter, statusFilter, categoryFilter])
+    }, [blockFilter, statusFilter, categoryFilter, priorityFilter])
 
     useEffect(() => {
         loadComplaints()
@@ -154,6 +180,12 @@ export default function AdminComplaintsPage() {
 
     const pendingCount = complaints.filter((c) => c.status === 'pending').length
     const resolvedCount = complaints.filter((c) => c.status === 'resolved').length
+    const overdueCount = complaints.filter((c) => c.isOverdue).length
+
+    // Client-side priority filter
+    const filteredComplaints = priorityFilter === 'all'
+        ? complaints
+        : complaints.filter((c) => c.priority === priorityFilter)
 
     return (
         <div>
@@ -169,6 +201,12 @@ export default function AdminComplaintsPage() {
                 <div className="flex items-center gap-2 flex-wrap">
                     <Badge variant="secondary" className="text-[10px]">{pendingCount} pending</Badge>
                     <Badge variant="success" className="text-[10px]">{resolvedCount} resolved</Badge>
+                    {overdueCount > 0 && (
+                        <Badge variant="destructive" className="text-[10px]">
+                            <FontAwesomeIcon icon={faTriangleExclamation} className="w-2.5 h-2.5 mr-1" />
+                            {overdueCount} overdue
+                        </Badge>
+                    )}
                     <Button variant="outline" size="sm" onClick={handleExportCSV} className="rounded-full">
                         <FontAwesomeIcon icon={faDownload} className="w-3.5 h-3.5 mr-1.5" />
                         Export CSV
@@ -203,12 +241,22 @@ export default function AdminComplaintsPage() {
                         {CATEGORIES.map((c) => <SelectItem key={c.value} value={c.value}><FontAwesomeIcon icon={c.icon} className="w-3 h-3 mr-1.5 inline" />{c.label}</SelectItem>)}
                     </SelectContent>
                 </Select>
+                <Select value={priorityFilter} onValueChange={setPriorityFilter}>
+                    <SelectTrigger className="w-[140px]"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="all">All Priorities</SelectItem>
+                        <SelectItem value="low">Low</SelectItem>
+                        <SelectItem value="normal">Normal</SelectItem>
+                        <SelectItem value="high">High</SelectItem>
+                        <SelectItem value="urgent">Urgent</SelectItem>
+                    </SelectContent>
+                </Select>
             </div>
 
             {/* Complaints List */}
             {loading ? (
                 <div className="space-y-4">{[1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-36 rounded-xl" />)}</div>
-            ) : complaints.length === 0 ? (
+            ) : filteredComplaints.length === 0 ? (
                 <Card className="rounded-xl">
                     <CardContent className="py-16 text-center">
                         <FontAwesomeIcon icon={faCommentDots} className="w-10 h-10 text-muted-foreground/20 mb-4" />
@@ -218,13 +266,17 @@ export default function AdminComplaintsPage() {
                 </Card>
             ) : (
                 <div className="space-y-4">
-                    {complaints.map((complaint) => {
+                    {filteredComplaints.map((complaint) => {
                         const statusCfg = STATUS_CONFIG[complaint.status] || STATUS_CONFIG.pending
                         const catInfo = CATEGORIES.find((cat) => cat.value === complaint.category)
+                        const priorityCfg = PRIORITY_CONFIG[complaint.priority] || PRIORITY_CONFIG.normal
+                        const slaText = complaint.status !== 'resolved' ? formatSlaRemaining(complaint.slaDeadline) : null
                         const isReplying = replyingTo === complaint.id
 
                         return (
-                            <Card key={complaint.id} className={`rounded-xl hover:shadow-md transition-shadow ${complaint.status === 'pending' ? 'border-amber-200 dark:border-amber-500/15' :
+                            <Card key={complaint.id} className={`rounded-xl hover:shadow-md transition-shadow ${
+                                complaint.isOverdue ? 'border-red-300 dark:border-red-500/30 bg-red-50/30 dark:bg-red-500/5' :
+                                complaint.status === 'pending' ? 'border-amber-200 dark:border-amber-500/15' :
                                     complaint.status === 'resolved' ? 'border-green-200 dark:border-green-500/15' : ''
                                 }`}>
                                 <CardContent className="p-5">
@@ -253,11 +305,25 @@ export default function AdminComplaintsPage() {
                                                 <FontAwesomeIcon icon={faClock} className="w-3 h-3" />
                                                 {formatDate(complaint.createdAt)}
                                             </div>
-                                            <div className="flex items-center gap-1.5">
+                                            <div className="flex items-center gap-1.5 flex-wrap">
                                                 <Badge variant="secondary" className="text-[10px] flex items-center gap-1">{catInfo && <FontAwesomeIcon icon={catInfo.icon} className="w-2.5 h-2.5" />} {catInfo?.label}</Badge>
                                                 <Badge variant={statusCfg.variant} className="text-[10px]">
                                                     <FontAwesomeIcon icon={statusCfg.icon} className="w-2.5 h-2.5 mr-1" />{statusCfg.label}
                                                 </Badge>
+                                                <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium inline-flex items-center gap-1 ${priorityCfg.color}`}>
+                                                    <FontAwesomeIcon icon={priorityCfg.icon} className="w-2.5 h-2.5" />
+                                                    {priorityCfg.label}
+                                                </span>
+                                                {slaText && (
+                                                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
+                                                        slaText === 'OVERDUE'
+                                                            ? 'text-red-700 bg-red-100 dark:text-red-400 dark:bg-red-500/15 animate-pulse'
+                                                            : 'text-muted-foreground bg-muted'
+                                                    }`}>
+                                                        <FontAwesomeIcon icon={faClock} className="w-2.5 h-2.5 mr-0.5" />
+                                                        {slaText}
+                                                    </span>
+                                                )}
                                             </div>
                                         </div>
                                     </div>

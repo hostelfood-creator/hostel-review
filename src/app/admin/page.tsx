@@ -2,9 +2,9 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { faMessage, faStar, faUsers, faBell, faTriangleExclamation, faScrewdriverWrench, faUtensils, faQrcode, faFileUpload } from '@fortawesome/free-solid-svg-icons'
+import { faMessage, faStar, faUsers, faBell, faTriangleExclamation, faScrewdriverWrench, faUtensils, faQrcode, faFileUpload, faPrint } from '@fortawesome/free-solid-svg-icons'
 import dynamic from 'next/dynamic'
-import type { ChartsRowProps, SentimentChartProps } from '@/components/admin-charts'
+import type { ChartsRowProps, SentimentChartProps, HeatmapProps, WeekOverWeekProps } from '@/components/admin-charts'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -35,6 +35,26 @@ const SentimentChart = dynamic<SentimentChartProps>(() => import('@/components/a
   ),
 })
 
+const RatingHeatmap = dynamic<HeatmapProps>(() => import('@/components/admin-charts').then(m => m.RatingHeatmap), {
+  ssr: false,
+  loading: () => (
+    <div className="w-full h-48 flex items-center justify-center text-muted-foreground text-sm">
+      <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin mr-2" />
+      Loading heatmap...
+    </div>
+  ),
+})
+
+const WeekOverWeekCards = dynamic<WeekOverWeekProps>(() => import('@/components/admin-charts').then(m => m.WeekOverWeekCards), {
+  ssr: false,
+  loading: () => (
+    <div className="w-full h-20 flex items-center justify-center text-muted-foreground text-sm">
+      <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin mr-2" />
+      Loading...
+    </div>
+  ),
+})
+
 interface AnalyticsData {
   overview: {
     totalReviews: number
@@ -59,6 +79,11 @@ interface AnalyticsData {
   }[]
   hostelBlocks: string[]
   blockStats: { block: string; totalReviews: number; avgRating: number; positive: number; negative: number }[]
+  dayOfWeekHeatmap: { day: string; breakfast: number; lunch: number; snacks: number; dinner: number }[]
+  weekOverWeek: {
+    thisWeek: { reviews: number; avgRating: number; positiveRate: number }
+    lastWeek: { reviews: number; avgRating: number; positiveRate: number }
+  }
   userRole: string
   userBlock: string | null
 }
@@ -80,6 +105,9 @@ export default function AdminDashboard() {
   const [data, setData] = useState<AnalyticsData | null>(null)
   const [loading, setLoading] = useState(true)
   const [days, setDays] = useState(7)
+  const [dateMode, setDateMode] = useState<'preset' | 'custom'>('preset')
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
   const [mealFilter, setMealFilter] = useState('all')
   const [blockFilter, setBlockFilter] = useState('all')
   const [maintenanceMode, setMaintenanceMode] = useState(false)
@@ -96,10 +124,15 @@ export default function AdminDashboard() {
     setLoading(true)
     try {
       const params = new URLSearchParams({
-        days: days.toString(),
         mealType: mealFilter,
         hostelBlock: blockFilter,
       })
+      if (dateMode === 'custom' && dateFrom && dateTo) {
+        params.set('from', dateFrom)
+        params.set('to', dateTo)
+      } else {
+        params.set('days', days.toString())
+      }
       const res = await fetch(`/api/analytics?${params}`)
       const json = await res.json()
       setData(json)
@@ -126,7 +159,7 @@ export default function AdminDashboard() {
     } finally {
       setLoading(false)
     }
-  }, [days, mealFilter, blockFilter])
+  }, [days, dateMode, dateFrom, dateTo, mealFilter, blockFilter])
 
   // Lightweight attendance-only refresh (avoids full analytics reload on every check-in)
   const refreshAttendanceOnly = useCallback(async () => {
@@ -301,6 +334,12 @@ export default function AdminDashboard() {
 
   return (
     <div>
+      {/* Print-only header */}
+      <div className="print-header hidden print-only">
+        <h1>Analytics Dashboard Report</h1>
+        <p>Generated on {new Date().toLocaleDateString('en-IN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })} &bull; Last {days} days{data.userBlock ? ` &bull; ${data.userBlock}` : ''}</p>
+      </div>
+
       {/* Page Title */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
         <div>
@@ -318,21 +357,50 @@ export default function AdminDashboard() {
           </div>
         </div>
         {data.userRole === 'super_admin' && (
-          <Button
-            variant={maintenanceMode ? "default" : "outline"}
-            onClick={handleToggleMaintenance}
-            disabled={togglingMaintenance}
-            className={maintenanceMode ? "bg-red-500 hover:bg-red-600 text-white" : ""}
-          >
-            <FontAwesomeIcon icon={faScrewdriverWrench} className="w-4 h-4 mr-2" />
-            {maintenanceMode ? 'Disable Maintenance' : 'Enable Maintenance'}
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => window.print()}
+              className="print-hide"
+            >
+              <FontAwesomeIcon icon={faPrint} className="w-4 h-4 mr-2" />
+              Print
+            </Button>
+            <Button
+              variant={maintenanceMode ? "default" : "outline"}
+              onClick={handleToggleMaintenance}
+              disabled={togglingMaintenance}
+              className={`print-hide ${maintenanceMode ? "bg-red-500 hover:bg-red-600 text-white" : ""}`}
+            >
+              <FontAwesomeIcon icon={faScrewdriverWrench} className="w-4 h-4 mr-2" />
+              {maintenanceMode ? 'Disable Maintenance' : 'Enable Maintenance'}
+            </Button>
+          </div>
         )}
       </div>
 
       {/* Filters */}
-      <div className="flex flex-wrap gap-2 mb-6">
-        <Select value={days.toString()} onValueChange={(v) => setDays(Number(v))}>
+      <div className="flex flex-wrap gap-2 mb-6 print-hide">
+        <Select
+          value={dateMode === 'custom' ? 'custom' : days.toString()}
+          onValueChange={(v) => {
+            if (v === 'custom') {
+              setDateMode('custom')
+              // Default to last 30 days for initial range
+              if (!dateFrom || !dateTo) {
+                const to = new Date()
+                const from = new Date()
+                from.setDate(from.getDate() - 30)
+                setDateFrom(from.toISOString().split('T')[0])
+                setDateTo(to.toISOString().split('T')[0])
+              }
+            } else {
+              setDateMode('preset')
+              setDays(Number(v))
+            }
+          }}
+        >
           <SelectTrigger className="w-[150px]">
             <SelectValue />
           </SelectTrigger>
@@ -340,8 +408,29 @@ export default function AdminDashboard() {
             <SelectItem value="7">Last 7 days</SelectItem>
             <SelectItem value="14">Last 14 days</SelectItem>
             <SelectItem value="30">Last 30 days</SelectItem>
+            <SelectItem value="90">Last 90 days</SelectItem>
+            <SelectItem value="custom">Custom range</SelectItem>
           </SelectContent>
         </Select>
+        {dateMode === 'custom' && (
+          <>
+            <input
+              type="date"
+              value={dateFrom}
+              onChange={(e) => setDateFrom(e.target.value)}
+              className="h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              max={dateTo || undefined}
+            />
+            <span className="self-center text-xs text-muted-foreground">to</span>
+            <input
+              type="date"
+              value={dateTo}
+              onChange={(e) => setDateTo(e.target.value)}
+              className="h-9 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              min={dateFrom || undefined}
+            />
+          </>
+        )}
         <Select value={mealFilter} onValueChange={setMealFilter}>
           <SelectTrigger className="w-[140px]">
             <SelectValue />
@@ -439,6 +528,21 @@ export default function AdminDashboard() {
         ))}
       </div>
 
+      {/* Week-over-Week Comparison */}
+      {data.weekOverWeek && (
+        <Card className="rounded-xl mb-6">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-semibold">Week-over-Week Comparison</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <WeekOverWeekCards
+              thisWeek={data.weekOverWeek.thisWeek}
+              lastWeek={data.weekOverWeek.lastWeek}
+            />
+          </CardContent>
+        </Card>
+      )}
+
       {/* Meal Attendance Card */}
       <Card className="rounded-xl mb-6">
         <CardHeader className="pb-2">
@@ -498,6 +602,18 @@ export default function AdminDashboard() {
         dailyChartData={dailyChartData}
         mealChartData={mealChartData}
       />
+
+      {/* Rating Heatmap (Day-of-Week × Meal) */}
+      {data.dayOfWeekHeatmap && data.dayOfWeekHeatmap.length > 0 && (
+        <Card className="rounded-xl mb-6">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-semibold">Rating Heatmap (Day of Week)</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <RatingHeatmap data={data.dayOfWeekHeatmap} />
+          </CardContent>
+        </Card>
+      )}
 
       {/* Per-Block Breakdown — Super Admin only */}
       {data.userRole === 'super_admin' && data.blockStats && data.blockStats.length > 0 && (

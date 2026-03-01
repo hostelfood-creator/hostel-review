@@ -35,6 +35,8 @@ interface AggregationResult {
   dailyMap: Map<string, { total: number; count: number }>
   mealMap: Map<string, { total: number; count: number }>
   blockMap: Map<string, { total: number; count: number; positive: number; negative: number }>
+  /** day-of-week × meal heatmap: key = "dayIndex:mealType" */
+  dowMealMap: Map<string, { total: number; count: number }>
 }
 
 // ── Aggregation helpers ──────────────────────────────────────────────────────
@@ -59,6 +61,7 @@ function aggregateReviews(
     dailyMap: new Map(),
     mealMap: new Map(),
     blockMap: new Map(),
+    dowMealMap: new Map(),
   }
 
   for (const r of reviews) {
@@ -82,6 +85,13 @@ function aggregateReviews(
 
     if (specialDates.has(r.date)) { result.specialRatingSum += rating; result.specialReviewCount++ }
     else { result.normalRatingSum += rating; result.normalReviewCount++ }
+
+    // Day-of-week × meal heatmap
+    const dow = new Date(r.date + 'T00:00:00').getDay() // 0=Sun..6=Sat
+    const dowKey = `${dow}:${r.mealType}`
+    const dowEntry = result.dowMealMap.get(dowKey)
+    if (dowEntry) { dowEntry.total += rating; dowEntry.count++ }
+    else result.dowMealMap.set(dowKey, { total: rating, count: 1 })
 
     if (isSuperAdmin) {
       const block = r.hostelBlock || 'Unknown'
@@ -140,19 +150,44 @@ export async function GET(request: Request) {
       hostelBlock = profile.hostel_block
     }
 
-    const startDate = new Date()
-    startDate.setDate(startDate.getDate() - days)
-    const startDateStr = startDate.toISOString().split('T')[0]
+    // Support custom date range (from/to) or preset days
+    const fromParam = searchParams.get('from')
+    const toParam = searchParams.get('to')
+    let startDateStr: string
+    let endDateStr: string | undefined
+
+    if (fromParam && toParam) {
+      // Validate ISO date format
+      const fromDate = new Date(fromParam + 'T00:00:00')
+      const toDate = new Date(toParam + 'T00:00:00')
+      if (isNaN(fromDate.getTime()) || isNaN(toDate.getTime())) {
+        return NextResponse.json({ error: 'Invalid date format. Use YYYY-MM-DD.' }, { status: 400 })
+      }
+      // Ensure range doesn't exceed 365 days
+      const diffDays = Math.ceil((toDate.getTime() - fromDate.getTime()) / (1000 * 60 * 60 * 24))
+      if (diffDays < 0 || diffDays > 365) {
+        return NextResponse.json({ error: 'Date range must be 0-365 days.' }, { status: 400 })
+      }
+      startDateStr = fromParam
+      endDateStr = toParam
+    } else {
+      const startDate = new Date()
+      startDate.setDate(startDate.getDate() - days)
+      startDateStr = startDate.toISOString().split('T')[0]
+    }
 
     // Fetch reviews and special menus in parallel
     const serviceDb = createServiceClient()
+    const specialMenuQuery = serviceDb
+      .from('menus')
+      .select('date, special_label')
+      .gte('date', startDateStr)
+      .not('special_label', 'is', null)
+    if (endDateStr) specialMenuQuery.lte('date', endDateStr)
+
     const [reviews, specialMenusResult] = await Promise.all([
       getReviewsForAnalytics(startDateStr, mealType, hostelBlock, profile.role as 'admin' | 'super_admin'),
-      serviceDb
-        .from('menus')
-        .select('date, special_label')
-        .gte('date', startDateStr)
-        .not('special_label', 'is', null),
+      specialMenuQuery,
     ])
 
     const specialMenus: SpecialMenu[] = (specialMenusResult.data || []) as SpecialMenu[]
@@ -170,7 +205,7 @@ export async function GET(request: Request) {
       totalReviews, ratingSum, lowRatings,
       positiveSentiment, neutralSentiment, negativeSentiment,
       specialRatingSum, specialReviewCount, normalRatingSum, normalReviewCount,
-      uniqueStudents, dailyMap, mealMap, blockMap,
+      uniqueStudents, dailyMap, mealMap, blockMap, dowMealMap,
     } = agg
 
     const avgRating = totalReviews > 0 ? ratingSum / totalReviews : 0
@@ -228,6 +263,62 @@ export async function GET(request: Request) {
         .sort((a, b) => b.totalReviews - a.totalReviews)
     }
 
+    // ── Day-of-week × meal heatmap ──────────────────────────────────────────
+    const DOW_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+    const MEAL_TYPES = ['breakfast', 'lunch', 'snacks', 'dinner']
+
+    const dayOfWeekHeatmap = DOW_NAMES.map((day, dayIdx) => {
+      const row: Record<string, number | string> = { day }
+      for (const meal of MEAL_TYPES) {
+        const entry = dowMealMap.get(`${dayIdx}:${meal}`)
+        row[meal] = entry ? Math.round((entry.total / entry.count) * 100) / 100 : 0
+      }
+      return row
+    })
+
+    // ── Week-over-week comparison ───────────────────────────────────────────
+    const now = new Date()
+    const thisWeekStart = new Date(now)
+    thisWeekStart.setDate(now.getDate() - now.getDay()) // Sunday
+    thisWeekStart.setHours(0, 0, 0, 0)
+    const lastWeekStart = new Date(thisWeekStart)
+    lastWeekStart.setDate(lastWeekStart.getDate() - 7)
+
+    const thisWeekStr = thisWeekStart.toISOString().split('T')[0]
+    const lastWeekStr = lastWeekStart.toISOString().split('T')[0]
+
+    let thisWeekReviews = 0, thisWeekRatingSum = 0, thisWeekPositive = 0
+    let lastWeekReviews = 0, lastWeekRatingSum = 0, lastWeekPositive = 0
+
+    for (const [dateStr, data] of dailyMap.entries()) {
+      if (dateStr >= thisWeekStr) {
+        thisWeekReviews += data.count
+        thisWeekRatingSum += data.total
+      } else if (dateStr >= lastWeekStr && dateStr < thisWeekStr) {
+        lastWeekReviews += data.count
+        lastWeekRatingSum += data.total
+      }
+    }
+
+    // Count sentiment per week from raw reviews
+    for (const r of reviews as ReviewRecord[]) {
+      if (r.date >= thisWeekStr && r.sentiment === 'positive') thisWeekPositive++
+      else if (r.date >= lastWeekStr && r.date < thisWeekStr && r.sentiment === 'positive') lastWeekPositive++
+    }
+
+    const weekOverWeek = {
+      thisWeek: {
+        reviews: thisWeekReviews,
+        avgRating: thisWeekReviews > 0 ? Math.round((thisWeekRatingSum / thisWeekReviews) * 100) / 100 : 0,
+        positiveRate: thisWeekReviews > 0 ? Math.round((thisWeekPositive / thisWeekReviews) * 100) : 0,
+      },
+      lastWeek: {
+        reviews: lastWeekReviews,
+        avgRating: lastWeekReviews > 0 ? Math.round((lastWeekRatingSum / lastWeekReviews) * 100) / 100 : 0,
+        positiveRate: lastWeekReviews > 0 ? Math.round((lastWeekPositive / lastWeekReviews) * 100) : 0,
+      },
+    }
+
     return NextResponse.json({
       overview: {
         totalReviews,
@@ -245,6 +336,8 @@ export async function GET(request: Request) {
       hostelBlocks,
       blockStats,
       specialDayStats,
+      dayOfWeekHeatmap,
+      weekOverWeek,
       userRole: profile.role,
       userBlock: profile.hostel_block,
     })

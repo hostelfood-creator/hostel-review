@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createServiceClient } from '@/lib/supabase/service'
 import { checkRateLimit, getClientIp, rateLimitResponse } from '@/lib/rate-limit'
 import { DEFAULT_MEAL_TIMINGS } from '@/lib/time'
+import { logAdminAction } from '@/lib/audit'
 
 const VALID_MEALS = ['breakfast', 'lunch', 'snacks', 'dinner']
 
@@ -108,6 +109,8 @@ export async function POST(request: Request) {
       console.error('Meal timings update error:', error)
       return NextResponse.json({ error: 'Failed to save timings' }, { status: 500 })
     }
+
+    logAdminAction(user.id, profile.role, 'meal_timings_update', 'site_settings', '1', { timings: sanitized }, ip)
 
     return NextResponse.json({ success: true, timings: sanitized })
   } catch (error) {

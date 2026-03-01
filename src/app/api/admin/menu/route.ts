@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getMenusByDate, upsertMenu, copyMenuToHostels, getStudentHostelBlocks } from '@/lib/db'
 import { checkRateLimit, getClientIp, rateLimitResponse } from '@/lib/rate-limit'
+import { logAdminAction } from '@/lib/audit'
 
 export async function GET(request: Request) {
   try {
@@ -100,10 +101,14 @@ export async function POST(request: Request) {
 
     const menuId = await upsertMenu({ date, mealType, items, timing, specialLabel: specialLabel || null, hostelBlock: effectiveBlock })
 
+    // Audit log
+    logAdminAction(user.id, profile.role, 'menu_upsert', 'menu', menuId, { date, mealType, hostelBlock: effectiveBlock, copyToAll: !!copyToAll }, ip)
+
     // Super admin can copy the saved menu to all hostels
     if (copyToAll && profile.role === 'super_admin') {
       const allBlocks = await getStudentHostelBlocks()
       await copyMenuToHostels(effectiveBlock, allBlocks, date)
+      logAdminAction(user.id, profile.role, 'menu_copy_all', 'menu', menuId, { date, sourceBlock: effectiveBlock, targetBlocks: allBlocks }, ip)
     }
 
     return NextResponse.json({ menu: { id: menuId } })

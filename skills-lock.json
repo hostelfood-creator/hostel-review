@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "skills": {
+    "code-review-pro": {
+      "source": "onewave-ai/claude-skills",
+      "sourceType": "github",
+      "computedHash": "3b9afa83b0032a6098b372f4904ea0aa17c28af31c1728565656261cf5c34e99"
+    },
+    "coding-standards": {
+      "source": "affaan-m/everything-claude-code",
+      "sourceType": "github",
+      "computedHash": "574803faf98d8a698c2b2151d7ed211208bb084320d411bd3a0919e6b08e48f6"
+    },
+    "frontend-design": {
+      "source": "anthropics/claude-plugins-official",
+      "sourceType": "github",
+      "computedHash": "739fdfda7f74445ad6b300d6eeba31a82aed276664242580206cd564e6fee3f6"
+    },
+    "security-review": {
+      "source": "affaan-m/everything-claude-code",
+      "sourceType": "github",
+      "computedHash": "77465a6213cf679cac8aa50ee3b9ba8438b44fcf7bd7f082ed4f16e9db846acd"
+    },
+    "ui-design-system": {
+      "source": "samhvw8/dot-claude",
+      "sourceType": "github",
+      "computedHash": "da805b478040b37f22d4ca74134bdad1f281f390f605fda2add000fec01df3c7"
+    }
+  }
+}

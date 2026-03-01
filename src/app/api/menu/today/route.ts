@@ -10,10 +10,13 @@ export async function GET(request: Request) {
     const rl = await checkRateLimit(`menu-today:${ip}`, 30, 60 * 1000)
     if (!rl.allowed) return rateLimitResponse(rl.resetAt)
 
-    const today = getTodayDate()
-    const menus = await getMenusByDate(today)
+    const { searchParams } = new URL(request.url)
+    const hostelBlock = searchParams.get('hostelBlock')
 
-    return NextResponse.json({ menus, date: today }, {
+    const today = getTodayDate()
+    const menus = await getMenusByDate(today, hostelBlock || undefined)
+
+    return NextResponse.json({ menus, date: today, hostelBlock: hostelBlock || null }, {
       headers: { 'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=60' },
     })
   } catch (error) {

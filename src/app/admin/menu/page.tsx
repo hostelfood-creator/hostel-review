@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { faPencil, faCalendarWeek, faCheck, faStar } from '@fortawesome/free-solid-svg-icons'
+import { faPencil, faCalendarWeek, faCheck, faStar, faBuilding, faCopy } from '@fortawesome/free-solid-svg-icons'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -84,12 +84,51 @@ export default function AdminMenuPage() {
   const [editForm, setEditForm] = useState({ items: '', timing: '', specialLabel: '' })
   const [saving, setSaving] = useState(false)
 
+  // Hostel block state
+  const [userRole, setUserRole] = useState<'admin' | 'super_admin'>('admin')
+  const [userHostelBlock, setUserHostelBlock] = useState<string>('')
+  const [selectedBlock, setSelectedBlock] = useState<string>('')
+  const [allBlocks, setAllBlocks] = useState<string[]>([])
+  const [profileLoaded, setProfileLoaded] = useState(false)
+  const [copyingToAll, setCopyingToAll] = useState(false)
+
   const selectedDate = weekDates[activeDay].date
 
+  // Load user profile and hostel blocks on mount
+  useEffect(() => {
+    const loadProfile = async () => {
+      try {
+        const [meRes, blocksRes] = await Promise.all([
+          fetch('/api/auth/me'),
+          fetch('/api/blocks'),
+        ])
+        const meData = await meRes.json()
+        const blocksData = await blocksRes.json()
+
+        const role = meData.user?.role === 'super_admin' ? 'super_admin' : 'admin'
+        const block = meData.user?.hostelBlock || ''
+
+        setUserRole(role)
+        setUserHostelBlock(block)
+
+        const blocks = (blocksData.blocks || []).map((b: { name: string }) => b.name)
+        setAllBlocks(blocks)
+
+        // Admin is locked to their block; super_admin defaults to first block
+        setSelectedBlock(role === 'super_admin' ? (blocks[0] || block) : block)
+        setProfileLoaded(true)
+      } catch {
+        toast.error('Failed to load profile')
+      }
+    }
+    loadProfile()
+  }, [])
+
   const loadMenus = useCallback(async () => {
+    if (!selectedBlock) return
     setLoading(true)
     try {
-      const res = await fetch(`/api/admin/menu?date=${selectedDate}`)
+      const res = await fetch(`/api/admin/menu?date=${selectedDate}&hostelBlock=${encodeURIComponent(selectedBlock)}`)
       const data = await res.json()
       setMenus(data.menus || [])
     } catch (err) {
@@ -98,11 +137,11 @@ export default function AdminMenuPage() {
     } finally {
       setLoading(false)
     }
-  }, [selectedDate])
+  }, [selectedDate, selectedBlock])
 
   useEffect(() => {
-    loadMenus()
-  }, [loadMenus])
+    if (profileLoaded) loadMenus()
+  }, [loadMenus, profileLoaded])
 
   const getMenuForMeal = (meal: string) => {
     return menus.find((m) => m.mealType === meal)
@@ -123,6 +162,10 @@ export default function AdminMenuPage() {
       toast.error('Menu items cannot be empty')
       return
     }
+    if (!selectedBlock) {
+      toast.error('No hostel block selected')
+      return
+    }
     setSaving(true)
     try {
       const res = await fetch('/api/admin/menu', {
@@ -134,12 +177,13 @@ export default function AdminMenuPage() {
           items: editForm.items.trim(),
           timing: editForm.timing.trim() || DEFAULT_TIMINGS[meal],
           specialLabel: editForm.specialLabel.trim() || null,
+          hostelBlock: selectedBlock,
         }),
       })
       if (res.ok) {
         setEditing(null)
         loadMenus()
-        toast.success(`${MEAL_LABELS[meal]} menu saved for ${weekDates[activeDay].label}`)
+        toast.success(`${MEAL_LABELS[meal]} menu saved for ${weekDates[activeDay].label} (${selectedBlock})`)
       } else {
         const data = await res.json()
         toast.error(data.error || 'Failed to save menu')
@@ -148,6 +192,39 @@ export default function AdminMenuPage() {
       toast.error('Network error')
     } finally {
       setSaving(false)
+    }
+  }
+
+  const copyToAllHostels = async () => {
+    if (!selectedBlock || menus.length === 0) {
+      toast.error('No menus to copy. Save menus first.')
+      return
+    }
+    setCopyingToAll(true)
+    try {
+      // Save each meal with copyToAll flag
+      let successCount = 0
+      for (const menu of menus) {
+        const res = await fetch('/api/admin/menu', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            date: menu.date,
+            mealType: menu.mealType,
+            items: menu.items,
+            timing: menu.timing,
+            specialLabel: menu.specialLabel || null,
+            hostelBlock: selectedBlock,
+            copyToAll: true,
+          }),
+        })
+        if (res.ok) successCount++
+      }
+      toast.success(`Copied ${successCount} meal(s) to all hostels for ${weekDates[activeDay].label}`)
+    } catch {
+      toast.error('Failed to copy menus')
+    } finally {
+      setCopyingToAll(false)
     }
   }
 
@@ -165,8 +242,51 @@ export default function AdminMenuPage() {
           <h1 className="text-xl font-bold text-foreground tracking-tight">Weekly Menu</h1>
         </div>
         <p className="text-sm text-muted-foreground">
-          Set menus for each day. Students see the menu for the current day automatically.
+          Set menus for each day. Students see the menu for their hostel automatically.
         </p>
+      </div>
+
+      {/* Hostel Block Selector */}
+      <div className="mb-5">
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="flex items-center gap-2">
+            <FontAwesomeIcon icon={faBuilding} className="w-4 h-4 text-muted-foreground" />
+            <span className="text-sm font-medium text-foreground">Hostel:</span>
+          </div>
+          {userRole === 'super_admin' && allBlocks.length > 0 ? (
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className="flex gap-1.5 overflow-x-auto no-scrollbar">
+                {allBlocks.map((block) => (
+                  <button
+                    key={block}
+                    onClick={() => { setSelectedBlock(block); setEditing(null) }}
+                    className={`text-xs font-semibold px-3 py-1.5 rounded-lg transition-all whitespace-nowrap ${
+                      selectedBlock === block
+                        ? 'bg-foreground text-background shadow-md'
+                        : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                    }`}
+                  >
+                    {block}
+                  </button>
+                ))}
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={copyToAllHostels}
+                disabled={copyingToAll || menus.length === 0}
+                className="text-xs ml-2"
+              >
+                <FontAwesomeIcon icon={faCopy} className="w-3 h-3 mr-1" />
+                {copyingToAll ? 'Copying...' : 'Apply to All Hostels'}
+              </Button>
+            </div>
+          ) : (
+            <span className="text-sm font-semibold text-primary bg-primary/10 px-3 py-1 rounded-lg">
+              {userHostelBlock || 'Not assigned'}
+            </span>
+          )}
+        </div>
       </div>
 
       {/* Day Tabs */}

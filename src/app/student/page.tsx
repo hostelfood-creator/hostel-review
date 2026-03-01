@@ -132,6 +132,7 @@ export default function StudentDashboard() {
   const [displayDate, setDisplayDate] = useState('')
   const [serverHour, setServerHour] = useState(new Date().getHours())
   const [userName, setUserName] = useState('')
+  const [userHostelBlock, setUserHostelBlock] = useState<string | null>(null)
   const [checkinStatus, setCheckinStatus] = useState<{ checkedIn: boolean; mealType?: string; mealLabel?: string } | null>(null)
   const [weeklyHistory, setWeeklyHistory] = useState<{ date: string; meals: string[] }[] | null>(null)
   const [weeklyPercentage, setWeeklyPercentage] = useState(0)
@@ -162,7 +163,10 @@ export default function StudentDashboard() {
   useEffect(() => {
     fetch('/api/auth/me')
       .then(r => r.json())
-      .then(d => { if (d.user?.name) setUserName(d.user.name.split(' ')[0]) })
+      .then(d => {
+        if (d.user?.name) setUserName(d.user.name.split(' ')[0])
+        if (d.user?.hostelBlock) setUserHostelBlock(d.user.hostelBlock)
+      })
       .catch(() => { })
 
     // Fetch today's check-in status
@@ -235,8 +239,11 @@ export default function StudentDashboard() {
     if (!todayDate) return
     const loadData = async () => {
       try {
+        const menuUrl = userHostelBlock
+          ? `/api/menu/today?hostelBlock=${encodeURIComponent(userHostelBlock)}`
+          : '/api/menu/today'
         const [menuRes, reviewRes] = await Promise.all([
-          fetch('/api/menu/today'),
+          fetch(menuUrl),
           fetch(`/api/reviews?date=${todayDate}`),
         ])
         const menuData = await menuRes.json()
@@ -268,7 +275,7 @@ export default function StudentDashboard() {
       }
     }
     loadData()
-  }, [todayDate, initReviewState])
+  }, [todayDate, userHostelBlock, initReviewState])
 
   const setRating = (mealType: string, rating: number) => {
     if (reviews[mealType]?.submitted) return

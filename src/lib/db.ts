@@ -341,15 +341,21 @@ export async function getReviewsForAnalytics(
 
 // ── Menus ─────────────────────────────────────────────────
 
-export async function getMenusByDate(date: string) {
+export async function getMenusByDate(date: string, hostelBlock?: string | null) {
   const supabase = await createClient()
-  const { data, error } = await supabase
+  let query = supabase
     .from('menus')
     .select('*')
     .eq('date', date)
 
+  if (hostelBlock) {
+    query = query.eq('hostel_block', hostelBlock)
+  }
+
+  const { data, error } = await query
+
   if (error || !data) return []
-  return data.map((m) => ({ ...m, _id: m.id, mealType: m.meal_type, specialLabel: m.special_label || null }))
+  return data.map((m) => ({ ...m, _id: m.id, mealType: m.meal_type, specialLabel: m.special_label || null, hostelBlock: m.hostel_block || null }))
 }
 
 export async function upsertMenu(data: {
@@ -358,6 +364,7 @@ export async function upsertMenu(data: {
   items: string;
   timing: string;
   specialLabel?: string | null;
+  hostelBlock: string;
 }) {
   const supabase = await createClient()
   const { data: inserted, error } = await supabase
@@ -369,14 +376,53 @@ export async function upsertMenu(data: {
         items: data.items,
         timing: data.timing,
         special_label: data.specialLabel || null,
+        hostel_block: data.hostelBlock,
       },
-      { onConflict: 'date,meal_type' }
+      { onConflict: 'date,meal_type,hostel_block' }
     )
     .select()
     .single()
 
   if (error) throw new Error(error.message)
   return inserted.id
+}
+
+/**
+ * Bulk-copy a menu from one hostel to multiple target hostels for a given date.
+ * Used by super_admin to set the same menu across all hostels at once.
+ */
+export async function copyMenuToHostels(
+  sourceBlock: string,
+  targetBlocks: string[],
+  date: string
+) {
+  const sourceMenus = await getMenusByDate(date, sourceBlock)
+  if (sourceMenus.length === 0) return 0
+
+  const supabase = await createClient()
+  let count = 0
+
+  for (const block of targetBlocks) {
+    if (block === sourceBlock) continue
+    for (const menu of sourceMenus) {
+      const { error } = await supabase
+        .from('menus')
+        .upsert(
+          {
+            date: menu.date,
+            meal_type: menu.meal_type,
+            items: menu.items,
+            timing: menu.timing,
+            special_label: menu.special_label || null,
+            hostel_block: block,
+          },
+          { onConflict: 'date,meal_type,hostel_block' }
+        )
+      if (!error) count++
+    }
+  }
+
+  return count
 }
 
 // ── Meal Check-ins (QR Attendance) ────────────────────────

@@ -592,69 +592,15 @@ export default function AdminDashboard() {
         </Card>
       )}
 
-      {/* Sentiment + Recent Reviews */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* Sentiment Pie Chart — lazy-loaded */}
-        <Card className="rounded-xl">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-semibold">Sentiment Analysis</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <SentimentChart sentimentData={sentimentData} />
-          </CardContent>
-        </Card>
-
-        {/* Recent Reviews */}
-        <Card className="lg:col-span-2 rounded-xl">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-semibold">Recent Reviews</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {data.recentReviews.length > 0 ? (
-              <div className="space-y-3 max-h-[340px] overflow-y-auto no-scrollbar">
-                {data.recentReviews.map((review) => (
-                  <div
-                    key={review.id}
-                    className="flex items-start gap-3 p-3 rounded-lg bg-muted/50 border transition-colors"
-                  >
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between mb-1">
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs font-semibold text-foreground">{review.userName}</span>
-                          {review.hostelBlock && (
-                            <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
-                              {review.hostelBlock}
-                            </Badge>
-                          )}
-                        </div>
-                        <Badge
-                          variant={review.rating >= 4 ? 'success' : review.rating >= 3 ? 'secondary' : 'destructive'}
-                          className="text-[10px]"
-                        >
-                          {review.rating}.0
-                        </Badge>
-                      </div>
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium">
-                          {MEAL_LABELS[review.mealType] || review.mealType}
-                        </span>
-                        <span className="text-[10px] text-muted-foreground/60">{review.date}</span>
-                      </div>
-                      {review.reviewText && (
-                        <p className="text-xs text-muted-foreground leading-relaxed">{review.reviewText}</p>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="h-48 flex items-center justify-center text-muted-foreground text-sm">
-                No reviews yet
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+      {/* Sentiment Analysis */}
+      <Card className="rounded-xl">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm font-semibold">Sentiment Analysis</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <SentimentChart sentimentData={sentimentData} />
+        </CardContent>
+      </Card>
     </div>
   )
 }

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { getMenusByDate, upsertMenu } from '@/lib/db'
+import { getMenusByDate, upsertMenu, copyMenuToHostels, getStudentHostelBlocks } from '@/lib/db'
 import { checkRateLimit, getClientIp, rateLimitResponse } from '@/lib/rate-limit'
 
 export async function GET(request: Request) {
@@ -15,13 +15,14 @@ export async function GET(request: Request) {
 
     if (!user) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
 
-    const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
+    const { data: profile } = await supabase.from('profiles').select('role, hostel_block').eq('id', user.id).single()
     if (!profile || !['admin', 'super_admin'].includes(profile.role)) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
     }
 
     const { searchParams } = new URL(request.url)
     const date = searchParams.get('date')
+    const hostelBlock = searchParams.get('hostelBlock')
 
     if (!date) {
       return NextResponse.json({ menus: [] })
@@ -30,8 +31,17 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'Invalid date format (expected YYYY-MM-DD)' }, { status: 400 })
     }
 
-    const menus = await getMenusByDate(date)
-    return NextResponse.json({ menus })
+    // Admin sees only their block; super_admin can pick any block
+    const effectiveBlock = profile.role === 'super_admin'
+      ? (hostelBlock || null)
+      : profile.hostel_block
+
+    if (!effectiveBlock) {
+      return NextResponse.json({ menus: [], hostelBlock: null })
+    }
+
+    const menus = await getMenusByDate(date, effectiveBlock)
+    return NextResponse.json({ menus, hostelBlock: effectiveBlock })
   } catch (error) {
     console.error('Admin menu GET error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
@@ -50,12 +60,13 @@ export async function POST(request: Request) {
 
     if (!user) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
 
-    const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
+    const { data: profile } = await supabase.from('profiles').select('role, hostel_block').eq('id', user.id).single()
     if (!profile || !['admin', 'super_admin'].includes(profile.role)) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
     }
 
-    const { date, mealType, items, timing, specialLabel } = await request.json()
+    const body = await request.json()
+    const { date, mealType, items, timing, specialLabel, hostelBlock, copyToAll } = body
 
     const VALID_MEAL_TYPES = ['breakfast', 'lunch', 'snacks', 'dinner']
 
@@ -78,7 +89,23 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Special label must be text (max 100 characters)' }, { status: 400 })
     }
 
-    const menuId = await upsertMenu({ date, mealType, items, timing, specialLabel: specialLabel || null })
+    // Determine which hostel block to save to
+    const effectiveBlock = profile.role === 'super_admin'
+      ? (hostelBlock || profile.hostel_block || '')
+      : (profile.hostel_block || '')
+
+    if (!effectiveBlock) {
+      return NextResponse.json({ error: 'No hostel block assigned. Please select a hostel.' }, { status: 400 })
+    }
+
+    const menuId = await upsertMenu({ date, mealType, items, timing, specialLabel: specialLabel || null, hostelBlock: effectiveBlock })
+
+    // Super admin can copy the saved menu to all hostels
+    if (copyToAll && profile.role === 'super_admin') {
+      const allBlocks = await getStudentHostelBlocks()
+      await copyMenuToHostels(effectiveBlock, allBlocks, date)
+    }
+
     return NextResponse.json({ menu: { id: menuId } })
   } catch (error) {
     console.error('Admin menu POST error:', error)

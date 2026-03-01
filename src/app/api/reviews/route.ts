@@ -23,7 +23,7 @@ export async function GET(request: Request) {
 
     // If profile cannot be retrieved, default to most restrictive access (student)
     if (!profile) {
-      const filters = { userId: user.id, limit: 50, offset: 0 }
+      const filters = { userId: user.id, limit: 50, offset: 0, callerRole: 'student' as const, callerId: user.id }
       const { data: reviews, total } = await getReviews(filters)
       return NextResponse.json({ reviews, userRole: 'student', userBlock: null, hostelBlocks: [], pagination: { page: 1, pageSize: 50, total, totalPages: Math.ceil(total / 50) } })
     }
@@ -46,7 +46,7 @@ export async function GET(request: Request) {
     const page = Math.max(1, parseInt(searchParams.get('page') || '1'))
     const pageSize = Math.min(100, Math.max(1, parseInt(searchParams.get('pageSize') || '50')))
 
-    const filters: { userId?: string; date?: string; mealType?: string; limit?: number; offset?: number; hostelBlock?: string } = {}
+    const filters: { userId?: string; date?: string; mealType?: string; limit?: number; offset?: number; hostelBlock?: string; callerRole?: 'admin' | 'super_admin' | 'student'; callerId?: string } = {}
     if (date) filters.date = date
     if (mealType) filters.mealType = mealType
     if (hostelBlock) filters.hostelBlock = hostelBlock
@@ -57,6 +57,9 @@ export async function GET(request: Request) {
     }
     filters.limit = pageSize
     filters.offset = (page - 1) * pageSize
+    // Pass caller identity for defense-in-depth RBAC inside enrichWithProfiles
+    filters.callerRole = (profile.role === 'admin' || profile.role === 'super_admin') ? profile.role : 'student'
+    filters.callerId = user.id
 
     const { data: reviews, total } = await getReviews(filters)
     const hostelBlocks = profile?.role === 'super_admin' ? await getStudentHostelBlocks() : []

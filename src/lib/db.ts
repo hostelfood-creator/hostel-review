@@ -53,32 +53,49 @@ interface MealCheckinRow {
 /**
  * Resolve profile data for a set of user IDs via the service client (bypasses RLS).
  *
- * SECURITY — AUTHORIZATION CONTRACT:
- * This function intentionally uses the service-role client because RLS correctly
- * blocks students from reading other students' profiles. Authorization is NOT
- * enforced here — it MUST be enforced by every calling route:
- *   - getReviews() → called by /api/reviews (admin-only, verified before call)
+ * SECURITY — DEFENSE-IN-DEPTH:
+ * This function enforces a runtime RBAC check in addition to the authorization
+ * enforced by every calling API route:
+ *   - getReviews() → called by /api/reviews (admin/super_admin see all; students scoped to own ID)
  *   - getReviewsForAnalytics() → called by /api/analytics (admin/super_admin only)
+ *
+ * Non-admin callers (students) may ONLY enrich their own profile. If a student
+ * caller passes userIds that include IDs other than their own, those foreign IDs
+ * are silently dropped — preventing IDOR-style profile disclosure even if a
+ * calling route has a bug.
+ *
  * Only non-sensitive display fields are fetched (name, hostel_block, register_id,
  * department, year). Sensitive fields (email, role) are never exposed.
- * DO NOT call this function from student-facing routes without authorization checks.
  */
 type ProfileFields = 'name' | 'hostel_block' | 'register_id' | 'department' | 'year'
 type ProfileInfo = Pick<ProfileRow, 'name' | 'hostel_block' | 'register_id' | 'department' | 'year'>
 
+/** Allowed caller roles for enrichWithProfiles */
+type CallerRole = 'admin' | 'super_admin' | 'student'
+
 async function enrichWithProfiles(
   userIds: string[],
   fields: ProfileFields[] = ['name', 'hostel_block', 'register_id', 'department', 'year'],
+  callerRole: CallerRole = 'student',
+  callerId?: string,
 ): Promise<Map<string, Partial<ProfileInfo>>> {
   const profileMap = new Map<string, Partial<ProfileInfo>>()
   if (userIds.length === 0) return profileMap
+
+  // RBAC guard: non-admin callers may only enrich their own profile
+  let filteredIds = userIds
+  if (callerRole !== 'admin' && callerRole !== 'super_admin') {
+    if (!callerId) return profileMap // no caller identity → return empty
+    filteredIds = userIds.filter((id) => id === callerId)
+    if (filteredIds.length === 0) return profileMap
+  }
 
   const serviceDb = createServiceClient()
   const selectCols = ['id', ...fields].join(', ')
   const { data: profiles } = await serviceDb
     .from('profiles')
     .select(selectCols)
-    .in('id', userIds)
+    .in('id', filteredIds)
 
   for (const p of (profiles || []) as unknown as Array<Record<string, string | null>>) {
     const entry: Partial<ProfileInfo> = {}
@@ -155,6 +172,8 @@ export async function getReviews(filters: {
   limit?: number;
   offset?: number;
   hostelBlock?: string;
+  callerRole?: CallerRole;
+  callerId?: string;
 }): Promise<{ data: Record<string, unknown>[]; total: number }> {
   const supabase = await createClient()
 
@@ -190,9 +209,14 @@ export async function getReviews(filters: {
   const total = count ?? data.length
 
   // Resolve profile names/blocks via shared helper (uses service client, bypasses RLS)
-  // SECURITY: Authorization is enforced by the calling API routes which check roles.
+  // SECURITY: Defense-in-depth — callerRole/callerId restrict non-admin enrichment
   const uniqueUserIds = [...new Set((data as ReviewRow[]).map((r) => r.user_id))]
-  const profileMap = await enrichWithProfiles(uniqueUserIds)
+  const profileMap = await enrichWithProfiles(
+    uniqueUserIds,
+    ['name', 'hostel_block', 'register_id', 'department', 'year'],
+    filters.callerRole ?? 'student',
+    filters.callerId,
+  )
 
   const mapped = (data as ReviewRow[]).map((r) => {
     const profile = profileMap.get(r.user_id)
@@ -263,7 +287,8 @@ export async function createReview(data: {
 export async function getReviewsForAnalytics(
   startDate: string,
   mealType?: string,
-  hostelBlock?: string
+  hostelBlock?: string,
+  callerRole: CallerRole = 'student',
 ) {
   const supabase = await createClient()
 
@@ -292,9 +317,13 @@ export async function getReviewsForAnalytics(
   if (error || !data) return []
 
   // Resolve profiles via shared helper (uses service client, bypasses RLS)
-  // SECURITY: Caller (/api/analytics) enforces admin-only access.
+  // SECURITY: Defense-in-depth — callerRole restricts non-admin enrichment
   const uniqueUserIds = [...new Set((data as ReviewRow[]).map((r) => r.user_id))]
-  const profileMap = await enrichWithProfiles(uniqueUserIds, ['name', 'hostel_block', 'register_id'])
+  const profileMap = await enrichWithProfiles(
+    uniqueUserIds,
+    ['name', 'hostel_block', 'register_id'],
+    callerRole,
+  )
 
   return (data as ReviewRow[]).map((r) => {
     const profile = profileMap.get(r.user_id)

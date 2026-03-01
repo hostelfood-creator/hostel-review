@@ -147,7 +147,7 @@ export async function GET(request: Request) {
     // Fetch reviews and special menus in parallel
     const serviceDb = createServiceClient()
     const [reviews, specialMenusResult] = await Promise.all([
-      getReviewsForAnalytics(startDateStr, mealType, hostelBlock),
+      getReviewsForAnalytics(startDateStr, mealType, hostelBlock, profile.role as 'admin' | 'super_admin'),
       serviceDb
         .from('menus')
         .select('date, special_label')

@@ -2,14 +2,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createServiceClient } from '@/lib/supabase/service'
 import { checkRateLimit, getClientIp, rateLimitResponse } from '@/lib/rate-limit'
-
-/** Default meal timing windows (used when DB has no data) */
-export const DEFAULT_MEAL_TIMINGS: Record<string, { start: string; end: string; label: string }> = {
-  breakfast: { start: '07:00', end: '10:00', label: 'Breakfast' },
-  lunch:     { start: '12:00', end: '15:00', label: 'Lunch' },
-  snacks:    { start: '16:00', end: '18:00', label: 'Snacks' },
-  dinner:    { start: '19:00', end: '22:00', label: 'Dinner' },
-}
+import { DEFAULT_MEAL_TIMINGS } from '@/lib/time'
 
 const VALID_MEALS = ['breakfast', 'lunch', 'snacks', 'dinner']
 

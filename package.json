@@ -31,7 +31,6 @@
     "clsx": "^2.1.0",
     "framer-motion": "^12.34.3",
     "jsqr": "^1.4.0",
-    "lucide-react": "^0.575.0",
     "motion": "^12.34.3",
     "next": "^16.1.6",
     "nodemailer": "^8.0.1",

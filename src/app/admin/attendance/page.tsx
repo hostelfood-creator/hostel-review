@@ -10,6 +10,7 @@ import { Label } from '@/components/ui/label'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { faQrcode, faDownload, faPrint, faUtensils, faCopy, faCheck, faClock, faPencil } from '@fortawesome/free-solid-svg-icons'
 import { toast } from 'sonner'
+import { formatTime } from '@/lib/time'
 
 /**
  * Generate QR code SVG using a simple client-side QR generator.
@@ -117,14 +118,6 @@ export default function AdminAttendancePage() {
     } finally {
       setSavingTimings(false)
     }
-  }
-
-  /** Convert "07:00" to "7:00 AM" */
-  const formatTime = (hhmm: string): string => {
-    const [h, m] = hhmm.split(':').map(Number)
-    const suffix = h >= 12 ? 'PM' : 'AM'
-    const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h
-    return `${h12}:${m.toString().padStart(2, '0')} ${suffix}`
   }
 
   const handleCopy = async () => {

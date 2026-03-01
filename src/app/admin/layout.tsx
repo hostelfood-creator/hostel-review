@@ -39,8 +39,13 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const handleLogout = async () => {
     // 1. Call API to sign out on server
     await fetch('/api/auth/logout', { method: 'POST' })
-    // 2. Clear token cookie on client to force immediate session destruction (using correct project ref)
-    document.cookie = 'sb-yktrmbwvwdkpueuupsij-auth-token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT'
+    // 2. Clear Supabase auth cookies on client
+    document.cookie.split(';').forEach(c => {
+      const name = c.trim().split('=')[0]
+      if (name.startsWith('sb-') && name.endsWith('-auth-token')) {
+        document.cookie = `${name}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT`
+      }
+    })
     // 3. Clear any other possible auth-related cookies just in case
     document.cookie = 'supabase-auth-token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT'
     // 4. Force hard reload to login page to clear all client state

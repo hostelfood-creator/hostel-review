@@ -3,27 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { getReviews, createReview, getStudentHostelBlocks } from '@/lib/db'
 import { getTodayDate, analyzeSentiment } from '@/lib/utils'
 import { checkRateLimit, getClientIp, rateLimitResponse } from '@/lib/rate-limit'
-
-/** Get IST date/hour using Intl API */
-function getISTDateTime() {
-  const now = new Date()
-  const formatter = new Intl.DateTimeFormat('en-US', {
-    timeZone: 'Asia/Kolkata',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  })
-  const parts = Object.fromEntries(
-    formatter.formatToParts(now).map((p) => [p.type, p.value])
-  )
-  return {
-    date: `${parts.year}-${parts.month}-${parts.day}`,
-    hours: parseInt(parts.hour!, 10),
-  }
-}
+import { getISTDateTime } from '@/lib/time'
 
 export async function GET(request: Request) {
   try {
@@ -205,7 +185,7 @@ export async function PATCH(request: Request) {
     // Fetch the review
     const { data: review, error: fetchErr } = await supabase
       .from('reviews')
-      .select('*')
+      .select('id, user_id, date, created_at')
       .eq('id', reviewId)
       .single()
 
@@ -288,7 +268,7 @@ export async function DELETE(request: Request) {
     // Fetch the review
     const { data: review, error: fetchErr } = await supabase
       .from('reviews')
-      .select('*')
+      .select('id, user_id, created_at')
       .eq('id', reviewId)
       .single()
 

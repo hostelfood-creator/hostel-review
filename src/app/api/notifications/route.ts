@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { checkRateLimit, getClientIp, rateLimitResponse } from '@/lib/rate-limit'
+import { getISTDate } from '@/lib/time'
 
 /** Strip HTML tags and limit length — defense-in-depth layer for stored content.
  *  NOTE: This is NOT a full XSS sanitizer. React auto-escapes on render;
@@ -8,21 +9,6 @@ import { checkRateLimit, getClientIp, rateLimitResponse } from '@/lib/rate-limit
 function sanitize(text: string | null | undefined, maxLen = 200): string {
     if (!text) return ''
     return text.replace(/<[^>]*>/g, '').trim().slice(0, maxLen)
-}
-
-/** Get today's date in IST as YYYY-MM-DD */
-function getISTToday(): string {
-    const now = new Date()
-    const formatter = new Intl.DateTimeFormat('en-US', {
-        timeZone: 'Asia/Kolkata',
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-    })
-    const parts = Object.fromEntries(
-        formatter.formatToParts(now).map((p) => [p.type, p.value])
-    )
-    return `${parts.year}-${parts.month}-${parts.day}`
 }
 
 export async function GET(request: Request) {
@@ -99,7 +85,7 @@ export async function GET(request: Request) {
                 })
 
             // Check today's menu updates (IST-safe)
-            const today = getISTToday()
+            const today = getISTDate()
             const { data: todayMenus } = await supabase
                 .from('menus')
                 .select('meal_type, items')
@@ -145,7 +131,7 @@ export async function GET(request: Request) {
             }
 
             // Check for low-rated reviews today (IST-safe)
-            const today = getISTToday()
+            const today = getISTDate()
             const { count: lowCount } = await supabase
                 .from('reviews')
                 .select('id', { count: 'exact', head: true })
@@ -164,7 +150,7 @@ export async function GET(request: Request) {
             }
 
             // Meal attendance summary for today (IST-safe)
-            const todayForCheckins = getISTToday()
+            const todayForCheckins = getISTDate()
             let checkinQuery = supabase
                 .from('meal_checkins')
                 .select('meal_type')

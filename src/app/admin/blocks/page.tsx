@@ -7,7 +7,8 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { toast } from 'sonner'
-import { Trash2, UserPlus, Building2, Plus } from 'lucide-react'
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
+import { faTrash, faUserPlus, faBuilding, faPlus } from '@fortawesome/free-solid-svg-icons'
 
 // Types based on the API response
 type AdminUser = {
@@ -185,7 +186,7 @@ export default function SuperAdminPage() {
         return (
             <div className="flex h-[50vh] flex-col items-center justify-center text-center gap-4 p-6">
                 <div className="w-16 h-16 rounded-full bg-destructive/10 flex items-center justify-center">
-                    <Building2 className="w-8 h-8 text-destructive" />
+                    <FontAwesomeIcon icon={faBuilding} className="w-8 h-8 text-destructive" />
                 </div>
                 <div>
                     <h2 className="text-lg font-bold text-foreground">Access Restricted</h2>
@@ -213,7 +214,7 @@ export default function SuperAdminPage() {
                     <Card>
                         <CardHeader>
                             <CardTitle className="flex items-center gap-2">
-                                <Building2 className="w-5 h-5 text-primary" />
+                                <FontAwesomeIcon icon={faBuilding} className="w-5 h-5 text-primary" />
                                 Add Hostel Block
                             </CardTitle>
                             <CardDescription>Create a new hostel block.</CardDescription>
@@ -228,7 +229,7 @@ export default function SuperAdminPage() {
                                     className="flex-1"
                                 />
                                 <Button type="submit" disabled={creatingBlock || !newBlockName.trim()}>
-                                    {creatingBlock ? <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" /> : <Plus className="w-4 h-4 mr-2" />}
+                                    {creatingBlock ? <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" /> : <FontAwesomeIcon icon={faPlus} className="w-4 h-4 mr-2" />}
                                     Add Block
                                 </Button>
                             </form>
@@ -256,7 +257,7 @@ export default function SuperAdminPage() {
                                                 onClick={() => handleDeleteBlock(block.id, block.name)}
                                                 className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
                                             >
-                                                <Trash2 className="w-4 h-4" />
+                                                <FontAwesomeIcon icon={faTrash} className="w-4 h-4" />
                                             </Button>
                                         </div>
                                     ))}
@@ -272,7 +273,7 @@ export default function SuperAdminPage() {
                     <Card>
                         <CardHeader>
                             <CardTitle className="flex items-center gap-2">
-                                <UserPlus className="w-5 h-5 text-primary" />
+                                <FontAwesomeIcon icon={faUserPlus} className="w-5 h-5 text-primary" />
                                 Add Wardens / Admins
                             </CardTitle>
                             <CardDescription>Create a new administrator account.</CardDescription>
@@ -388,7 +389,7 @@ export default function SuperAdminPage() {
                                                 onClick={() => handleDeleteAdmin(admin.id, admin.name)}
                                                 className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
                                             >
-                                                <Trash2 className="w-4 h-4" />
+                                                <FontAwesomeIcon icon={faTrash} className="w-4 h-4" />
                                             </Button>
                                         )}
                                     </div>

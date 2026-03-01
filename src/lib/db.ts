@@ -1,6 +1,53 @@
 import { createClient } from '@/lib/supabase/server'
 import { createServiceClient } from '@/lib/supabase/service'
 
+// ── Row types (mirrors Supabase table schemas) ───────────
+
+interface ProfileRow {
+  id: string
+  name: string
+  register_id: string | null
+  hostel_block: string | null
+  department: string | null
+  year: string | null
+  role: string
+  email: string | null
+  created_at: string
+}
+
+interface ReviewRow {
+  id: string
+  user_id: string
+  date: string
+  meal_type: string
+  rating: number
+  review_text: string | null
+  sentiment: string | null
+  anonymous: boolean
+  created_at: string
+  admin_reply: string | null
+  admin_reply_by: string | null
+  admin_replied_at: string | null
+}
+
+interface MenuRow {
+  id: string
+  date: string
+  meal_type: string
+  items: string
+  timing: string
+  special_label: string | null
+}
+
+interface MealCheckinRow {
+  id: string
+  user_id: string
+  meal_type: string
+  date: string
+  checked_in_at: string
+  hostel_block: string | null
+}
+
 // ── Users ─────────────────────────────────────────────────
 
 export async function getUserByRegisterId(registerId: string) {
@@ -63,7 +110,7 @@ export async function getReviews(filters: {
   limit?: number;
   offset?: number;
   hostelBlock?: string;
-}): Promise<{ data: any[]; total: number }> {
+}): Promise<{ data: Record<string, unknown>[]; total: number }> {
   const supabase = await createClient()
 
   // If filtering by hostel block, first get the user IDs for that block
@@ -103,17 +150,17 @@ export async function getReviews(filters: {
   // API routes (/api/reviews, /api/analytics) which check roles before calling this function.
   // Only non-sensitive display fields are fetched (name, hostel_block, register_id, department, year).
   const serviceDb = createServiceClient()
-  const uniqueUserIds = [...new Set(data.map((r: any) => r.user_id))]
+  const uniqueUserIds = [...new Set(data.map((r) => r.user_id))]
   const profileMap = new Map<string, { name: string; hostel_block: string | null; register_id: string | null; department: string | null; year: string | null }>()
   if (uniqueUserIds.length > 0) {
     const { data: profiles } = await serviceDb
       .from('profiles')
       .select('id, name, hostel_block, register_id, department, year')
       .in('id', uniqueUserIds)
-      ; (profiles || []).forEach((p: any) => profileMap.set(p.id, { name: p.name, hostel_block: p.hostel_block, register_id: p.register_id, department: p.department, year: p.year }))
+      ; (profiles || []).forEach((p) => profileMap.set(p.id, { name: p.name, hostel_block: p.hostel_block, register_id: p.register_id, department: p.department, year: p.year }))
   }
 
-  const mapped = data.map((r: any) => {
+  const mapped = data.map((r) => {
     const profile = profileMap.get(r.user_id)
     return {
       ...r,
@@ -214,17 +261,17 @@ export async function getReviewsForAnalytics(
   // SECURITY: Intentional — caller (/api/analytics) enforces admin-only access. Service role
   // needed because RLS blocks cross-user profile reads. Only display fields fetched.
   const serviceDb = createServiceClient()
-  const uniqueUserIds = [...new Set(data.map((r: any) => r.user_id))]
+  const uniqueUserIds = [...new Set(data.map((r) => r.user_id))]
   const profileMap = new Map<string, { name: string; hostel_block: string | null; register_id: string | null }>()
   if (uniqueUserIds.length > 0) {
     const { data: profiles } = await serviceDb
       .from('profiles')
       .select('id, name, hostel_block, register_id')
       .in('id', uniqueUserIds)
-      ; (profiles || []).forEach((p: any) => profileMap.set(p.id, { name: p.name, hostel_block: p.hostel_block, register_id: p.register_id }))
+      ; (profiles || []).forEach((p) => profileMap.set(p.id, { name: p.name, hostel_block: p.hostel_block, register_id: p.register_id }))
   }
 
-  return data.map((r: any) => {
+  return data.map((r) => {
     const profile = profileMap.get(r.user_id)
     return {
       ...r,
@@ -426,7 +473,7 @@ export async function getAttendanceList(
   meals.forEach(m => { ate[m] = 0; missed[m] = 0 })
 
   // 4. Build records
-  const records: AttendanceRecord[] = students.map((s: any) => {
+  const records: AttendanceRecord[] = students.map((s) => {
     const userCheckins = checkinMap.get(s.id)
     const mealStatus: Record<string, { checkedIn: boolean; checkedInAt: string | null }> = {}
 

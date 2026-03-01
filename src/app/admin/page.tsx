@@ -3,20 +3,8 @@
 import { useEffect, useState, useCallback } from 'react'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { faMessage, faStar, faUsers, faBell, faTriangleExclamation, faScrewdriverWrench, faUtensils, faQrcode, faFileUpload } from '@fortawesome/free-solid-svg-icons'
-import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  BarChart,
-  Bar,
-  PieChart,
-  Pie,
-  Cell,
-} from 'recharts'
+import dynamic from 'next/dynamic'
+import type { ChartsRowProps, SentimentChartProps } from '@/components/admin-charts'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -25,6 +13,27 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Button } from '@/components/ui/button'
 import { toast } from 'sonner'
 import { createClient } from '@/lib/supabase/client'
+
+// Lazy-load chart components to reduce initial bundle size (~200KB)
+const ChartsRow = dynamic<ChartsRowProps>(() => import('@/components/admin-charts').then(m => m.ChartsRow), {
+  ssr: false,
+  loading: () => (
+    <div className="w-full h-60 flex items-center justify-center text-muted-foreground text-sm">
+      <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin mr-2" />
+      Loading charts...
+    </div>
+  ),
+})
+
+const SentimentChart = dynamic<SentimentChartProps>(() => import('@/components/admin-charts').then(m => m.SentimentChart), {
+  ssr: false,
+  loading: () => (
+    <div className="w-full h-48 flex items-center justify-center text-muted-foreground text-sm">
+      <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin mr-2" />
+      Loading chart...
+    </div>
+  ),
+})
 
 interface AnalyticsData {
   overview: {
@@ -484,99 +493,11 @@ export default function AdminDashboard() {
         </CardContent>
       </Card>
 
-      {/* Charts Row */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
-        {/* Rating Trend */}
-        <Card className="rounded-xl">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-semibold">Rating Trend</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {dailyChartData.length > 0 ? (
-              <ResponsiveContainer width="100%" height={240}>
-                <LineChart data={dailyChartData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(161,161,170,0.15)" />
-                  <XAxis
-                    dataKey="date"
-                    tick={{ fill: '#A1A1AA', fontSize: 11 }}
-                    tickLine={false}
-                    axisLine={{ stroke: 'rgba(161,161,170,0.15)' }}
-                  />
-                  <YAxis
-                    domain={[0, 5]}
-                    tick={{ fill: '#A1A1AA', fontSize: 11 }}
-                    tickLine={false}
-                    axisLine={{ stroke: 'rgba(161,161,170,0.15)' }}
-                  />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: 'var(--tooltip-bg, #fff)',
-                      border: '1px solid var(--tooltip-border, #e4e4e7)',
-                      borderRadius: '8px',
-                      fontSize: '12px',
-                      color: 'var(--tooltip-color, #18181b)',
-                    }}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="avgRating"
-                    stroke="#D4920B"
-                    strokeWidth={2}
-                    dot={{ fill: '#D4920B', r: 4 }}
-                    activeDot={{ r: 6 }}
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="h-60 flex items-center justify-center text-muted-foreground text-sm">
-                No data available
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Meal Comparison */}
-        <Card className="rounded-xl">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-semibold">Meal Comparison</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {mealChartData.length > 0 ? (
-              <ResponsiveContainer width="100%" height={240}>
-                <BarChart data={mealChartData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(161,161,170,0.15)" />
-                  <XAxis
-                    dataKey="name"
-                    tick={{ fill: '#A1A1AA', fontSize: 11 }}
-                    tickLine={false}
-                    axisLine={{ stroke: 'rgba(161,161,170,0.15)' }}
-                  />
-                  <YAxis
-                    domain={[0, 5]}
-                    tick={{ fill: '#A1A1AA', fontSize: 11 }}
-                    tickLine={false}
-                    axisLine={{ stroke: 'rgba(161,161,170,0.15)' }}
-                  />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: 'var(--tooltip-bg, #fff)',
-                      border: '1px solid var(--tooltip-border, #e4e4e7)',
-                      borderRadius: '8px',
-                      fontSize: '12px',
-                      color: 'var(--tooltip-color, #18181b)',
-                    }}
-                  />
-                  <Bar dataKey="avgRating" fill="#D4920B" radius={[6, 6, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="h-60 flex items-center justify-center text-muted-foreground text-sm">
-                No data available
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+      {/* Charts Row — lazy-loaded */}
+      <ChartsRow
+        dailyChartData={dailyChartData}
+        mealChartData={mealChartData}
+      />
 
       {/* Per-Block Breakdown — Super Admin only */}
       {data.userRole === 'super_admin' && data.blockStats && data.blockStats.length > 0 && (
@@ -673,54 +594,13 @@ export default function AdminDashboard() {
 
       {/* Sentiment + Recent Reviews */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* Sentiment Pie Chart */}
+        {/* Sentiment Pie Chart — lazy-loaded */}
         <Card className="rounded-xl">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-semibold">Sentiment Analysis</CardTitle>
           </CardHeader>
           <CardContent>
-            {sentimentData.length > 0 ? (
-              <div className="flex flex-col items-center">
-                <ResponsiveContainer width="100%" height={180}>
-                  <PieChart>
-                    <Pie
-                      data={sentimentData}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={45}
-                      outerRadius={75}
-                      paddingAngle={3}
-                      dataKey="value"
-                    >
-                      {sentimentData.map((entry, i) => (
-                        <Cell key={i} fill={entry.color} />
-                      ))}
-                    </Pie>
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: 'var(--tooltip-bg, #fff)',
-                        border: '1px solid var(--tooltip-border, #e4e4e7)',
-                        borderRadius: '8px',
-                        fontSize: '12px',
-                        color: 'var(--tooltip-color, #18181b)',
-                      }}
-                    />
-                  </PieChart>
-                </ResponsiveContainer>
-                <div className="flex gap-4 mt-2">
-                  {sentimentData.map((d) => (
-                    <div key={d.name} className="flex items-center gap-1.5">
-                      <div className="w-2 h-2 rounded-full" style={{ backgroundColor: d.color }} />
-                      <span className="text-xs text-muted-foreground">{d.name} ({d.value})</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ) : (
-              <div className="h-48 flex items-center justify-center text-muted-foreground text-sm">
-                No sentiment data
-              </div>
-            )}
+            <SentimentChart sentimentData={sentimentData} />
           </CardContent>
         </Card>
 

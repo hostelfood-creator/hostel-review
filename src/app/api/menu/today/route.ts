@@ -13,7 +13,9 @@ export async function GET(request: Request) {
     const today = getTodayDate()
     const menus = await getMenusByDate(today)
 
-    return NextResponse.json({ menus, date: today })
+    return NextResponse.json({ menus, date: today }, {
+      headers: { 'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=60' },
+    })
   } catch (error) {
     console.error('Menu today error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

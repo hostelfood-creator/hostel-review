@@ -16,6 +16,7 @@ import {
 } from '@fortawesome/free-solid-svg-icons'
 import { createClient } from '@/lib/supabase/client'
 import { toast } from 'sonner'
+import { getISTDate } from '@/lib/time'
 import Link from 'next/link'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
@@ -69,13 +70,6 @@ function formatTime(iso: string | null): string {
   })
 }
 
-/** Get IST today as YYYY-MM-DD */
-function getISTToday(): string {
-  const now = new Date()
-  const formatter = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' })
-  return formatter.format(now) // en-CA = YYYY-MM-DD
-}
-
 /** Escape HTML entities to prevent XSS in PDF export */
 function escHtml(str: string): string {
   return str
@@ -92,7 +86,7 @@ export default function AttendanceListPage() {
   const [history, setHistory] = useState<HistoryDay[]>([])
   const [loading, setLoading] = useState(true)
   const [historyLoading, setHistoryLoading] = useState(true)
-  const [date, setDate] = useState(getISTToday())
+  const [date, setDate] = useState(getISTDate())
   const [mealFilter, setMealFilter] = useState('all')
   const [blockFilter, setBlockFilter] = useState('all')
   const [statusFilter, setStatusFilter] = useState<'all' | 'ate' | 'missed'>('all')
@@ -140,7 +134,7 @@ export default function AttendanceListPage() {
   const loadHistory = useCallback(async () => {
     setHistoryLoading(true)
     try {
-      const endDate = getISTToday()
+      const endDate = getISTDate()
       // Use IST-safe date arithmetic (avoids UTC offset near midnight)
       const [y, m, d] = endDate.split('-').map(Number)
       const startD = new Date(y, m - 1, d)

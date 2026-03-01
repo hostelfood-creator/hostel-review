@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { faEye, faEyeSlash } from '@fortawesome/free-solid-svg-icons'
@@ -15,6 +15,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { OtpInput } from '@/components/ui/otp-input'
+import ParticlesBackground from '@/components/particles-background'
 import { motion } from 'framer-motion'
 import { UserGuide } from '@/components/user-guide'
 import { Turnstile, type TurnstileRef } from '@/components/turnstile'
@@ -338,48 +339,10 @@ export default function LoginPage() {
 
   const passwordStrength = getPasswordStrength(form.password)
 
-  // Generate stable particle configs once (avoids re-randomising on every render)
-  const particles = useMemo(() => {
-    const seed = 42 // deterministic pseudo-random for SSR/client consistency
-    const mulberry32 = (s: number) => () => { s |= 0; s = (s + 0x6d2b79f5) | 0; let t = Math.imul(s ^ (s >>> 15), 1 | s); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296 }
-    const rand = mulberry32(seed)
-    return Array.from({ length: 18 }, (_, i) => ({
-      id: i,
-      x: rand() * 100,           // % from left
-      y: rand() * 100,           // % from top
-      size: 4 + rand() * 10,     // px
-      duration: 12 + rand() * 20, // seconds
-      delay: rand() * -20,       // negative = already mid-animation on mount
-      dx: (rand() - 0.5) * 30,   // horizontal drift range (%)
-      dy: (rand() - 0.5) * 30,   // vertical drift range (%)
-      opacity: 0.10 + rand() * 0.18,
-    }))
-  }, [])
-
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4 transition-colors relative overflow-hidden">
       {/* Parallax floating particles */}
-      <div aria-hidden className="pointer-events-none fixed inset-0 z-0 overflow-hidden">
-        {particles.map((p) => (
-          <motion.div
-            key={p.id}
-            className="absolute rounded-full bg-primary/20 dark:bg-primary/15"
-            style={{ left: `${p.x}%`, top: `${p.y}%`, width: p.size, height: p.size }}
-            animate={{
-              x: [0, p.dx, -p.dx * 0.6, 0],
-              y: [0, p.dy, -p.dy * 0.8, 0],
-              scale: [1, 1.3, 0.85, 1],
-              opacity: [p.opacity, p.opacity * 1.5, p.opacity * 0.6, p.opacity],
-            }}
-            transition={{
-              duration: p.duration,
-              repeat: Infinity,
-              ease: 'easeInOut',
-              delay: p.delay,
-            }}
-          />
-        ))}
-      </div>
+      <ParticlesBackground />
 
       {/* Cloudflare Turnstile — invisible bot protection */}
       <Turnstile

@@ -2,22 +2,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getAttendanceList, getAttendanceHistory } from '@/lib/db'
 import { checkRateLimit, getClientIp, rateLimitResponse } from '@/lib/rate-limit'
-
-/** Get IST date using Intl API */
-function getISTDate() {
-  const now = new Date()
-  const TZ = 'Asia/Kolkata'
-  const formatter = new Intl.DateTimeFormat('en-US', {
-    timeZone: TZ,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  })
-  const parts = Object.fromEntries(
-    formatter.formatToParts(now).map((p) => [p.type, p.value])
-  )
-  return `${parts.year}-${parts.month}-${parts.day}`
-}
+import { getISTDate } from '@/lib/time'
 
 /**
  * GET — Admin: fetch detailed attendance list (who ate / who missed)

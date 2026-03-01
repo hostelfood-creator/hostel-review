@@ -1,14 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/service'
 import { checkRateLimit, getClientIp, rateLimitResponse } from '@/lib/rate-limit'
-
-/** Default meal timing windows */
-const DEFAULT_MEAL_TIMINGS = {
-  breakfast: { start: '07:00', end: '10:00', label: 'Breakfast' },
-  lunch:     { start: '12:00', end: '15:00', label: 'Lunch' },
-  snacks:    { start: '16:00', end: '18:00', label: 'Snacks' },
-  dinner:    { start: '19:00', end: '22:00', label: 'Dinner' },
-}
+import { formatTime, DEFAULT_MEAL_TIMINGS } from '@/lib/time'
 
 /** GET — Public endpoint for current meal timings (used by student check-in pages) */
 export async function GET(request: Request) {
@@ -42,12 +35,4 @@ export async function GET(request: Request) {
     console.error('Public meal timings error:', error)
     return NextResponse.json({ timings: DEFAULT_MEAL_TIMINGS }, { status: 200 })
   }
-}
-
-/** Convert "07:00" / "19:30" to "7:00 AM" / "7:30 PM" */
-function formatTime(hhmm: string): string {
-  const [h, m] = hhmm.split(':').map(Number)
-  const suffix = h >= 12 ? 'PM' : 'AM'
-  const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h
-  return `${h12}:${m.toString().padStart(2, '0')} ${suffix}`
 }

@@ -7,7 +7,8 @@ import {
     type Variants,
     AnimatePresence,
 } from 'motion/react';
-import { Plus, Loader2 } from 'lucide-react';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faPlus, faSpinner } from '@fortawesome/free-solid-svg-icons';
 import { cn } from '@/lib/utils';
 
 /**
@@ -110,7 +111,7 @@ const MicroExpander = React.forwardRef<HTMLButtonElement, MicroExpanderProps>(
                                 exit={{ opacity: 0, scale: 0.5 }}
                                 transition={{ duration: 0.2 }}
                             >
-                                <Loader2 className='h-5 w-5 animate-spin' />
+                                <FontAwesomeIcon icon={faSpinner} className='h-5 w-5 animate-spin' />
                             </motion.div>
                         ) : (
                             <motion.div
@@ -120,7 +121,7 @@ const MicroExpander = React.forwardRef<HTMLButtonElement, MicroExpanderProps>(
                                 exit={{ opacity: 0, scale: 0.5 }}
                                 transition={{ duration: 0.2 }}
                             >
-                                {icon || <Plus className='h-5 w-5' />}
+                                {icon || <FontAwesomeIcon icon={faPlus} className='h-5 w-5' />}
                             </motion.div>
                         )}
                     </AnimatePresence>

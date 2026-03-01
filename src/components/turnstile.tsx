@@ -88,6 +88,13 @@ function loadTurnstileScript(): Promise<void> {
 // ── Constants ────────────────────────────────────────────────────────
 const MAX_RETRIES = 3
 const RETRY_BASE_DELAY_MS = 2000
+/**
+ * If Turnstile hasn't produced a token within this many ms after
+ * render/reset, fire onFatalError so the parent can switch to hCaptcha.
+ * Covers the case where the widget silently waits for user interaction
+ * (e.g. managed-mode checkbox) but is hidden off-screen.
+ */
+const VERIFICATION_TIMEOUT_MS = 8000
 
 // ── Component ────────────────────────────────────────────────────────
 export const Turnstile = forwardRef<TurnstileRef, TurnstileProps>(
@@ -96,6 +103,9 @@ export const Turnstile = forwardRef<TurnstileRef, TurnstileProps>(
     const widgetIdRef = useRef<string | null>(null)
     const retryCountRef = useRef(0)
     const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+    const verifyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+    const tokenReceivedRef = useRef(false)
+    const fatalFiredRef = useRef(false)
     const mountedRef = useRef(true)
 
     // Keep callback refs in sync without re-rendering the widget
@@ -110,6 +120,18 @@ export const Turnstile = forwardRef<TurnstileRef, TurnstileProps>(
 
     const siteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY
 
+    /** Start (or restart) the verification timeout clock. */
+    const startVerificationTimeout = useCallback(() => {
+      if (verifyTimerRef.current) clearTimeout(verifyTimerRef.current)
+      tokenReceivedRef.current = false
+      verifyTimerRef.current = setTimeout(() => {
+        if (!mountedRef.current || tokenReceivedRef.current || fatalFiredRef.current) return
+        console.error('[Turnstile] Verification timeout — no token after', VERIFICATION_TIMEOUT_MS, 'ms')
+        fatalFiredRef.current = true
+        onFatalErrorRef.current?.()
+      }, VERIFICATION_TIMEOUT_MS)
+    }, [])
+
     // Expose reset() to parent (single-use tokens need a fresh challenge)
     useImperativeHandle(
       ref,
@@ -120,14 +142,19 @@ export const Turnstile = forwardRef<TurnstileRef, TurnstileProps>(
               window.turnstile.reset(widgetIdRef.current)
             } catch { /* widget may have been removed */ }
           }
+          // Restart the timeout after reset — new token expected
+          startVerificationTimeout()
         },
       }),
-      []
+      [startVerificationTimeout]
     )
 
     // ── Render / re-render the widget ────────────────────────────────
     const renderWidget = useCallback(async () => {
       if (!siteKey || !containerRef.current || !mountedRef.current) return
+
+      // Start the verification timeout clock
+      startVerificationTimeout()
 
       await loadTurnstileScript()
 
@@ -137,7 +164,10 @@ export const Turnstile = forwardRef<TurnstileRef, TurnstileProps>(
         retryCountRef.current += 1
 
         if (retryCountRef.current >= MAX_RETRIES) {
-          onFatalErrorRef.current?.()
+          if (!fatalFiredRef.current) {
+            fatalFiredRef.current = true
+            onFatalErrorRef.current?.()
+          }
           return
         }
 
@@ -164,6 +194,8 @@ export const Turnstile = forwardRef<TurnstileRef, TurnstileProps>(
           sitekey: siteKey,
           callback: (token: string) => {
             console.log('[Turnstile] Token received successfully')
+            tokenReceivedRef.current = true
+            if (verifyTimerRef.current) clearTimeout(verifyTimerRef.current)
             retryCountRef.current = 0
             onVerifyRef.current(token)
           },
@@ -182,7 +214,10 @@ export const Turnstile = forwardRef<TurnstileRef, TurnstileProps>(
             retryCountRef.current += 1
             if (retryCountRef.current >= MAX_RETRIES) {
               console.error('[Turnstile] Max retries exhausted')
-              onFatalErrorRef.current?.()
+              if (!fatalFiredRef.current) {
+                fatalFiredRef.current = true
+                onFatalErrorRef.current?.()
+              }
               return
             }
 
@@ -203,11 +238,12 @@ export const Turnstile = forwardRef<TurnstileRef, TurnstileProps>(
       } catch (err) {
         console.error('[Turnstile] render() threw:', err)
         retryCountRef.current += 1
-        if (retryCountRef.current >= MAX_RETRIES) {
+        if (retryCountRef.current >= MAX_RETRIES && !fatalFiredRef.current) {
+          fatalFiredRef.current = true
           onFatalErrorRef.current?.()
         }
       }
-    }, [siteKey])
+    }, [siteKey, startVerificationTimeout])
 
     useEffect(() => {
       mountedRef.current = true
@@ -216,6 +252,7 @@ export const Turnstile = forwardRef<TurnstileRef, TurnstileProps>(
       return () => {
         mountedRef.current = false
         if (retryTimerRef.current) clearTimeout(retryTimerRef.current)
+        if (verifyTimerRef.current) clearTimeout(verifyTimerRef.current)
         if (widgetIdRef.current && window.turnstile) {
           try {
             window.turnstile.remove(widgetIdRef.current)

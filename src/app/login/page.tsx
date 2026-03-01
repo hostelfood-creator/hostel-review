@@ -186,6 +186,10 @@ export default function LoginPage() {
       toast.error('Bot verification loading — please wait a moment and try again.')
       return
     }
+    if (!turnstileToken && turnstileFailed) {
+      toast.error('Please complete the captcha verification below.')
+      return
+    }
     setLoading(true)
     setError('')
     try {
@@ -266,6 +270,10 @@ export default function LoginPage() {
 
     if (!turnstileToken && !turnstileFailed) {
       toast.error('Bot verification loading — please wait a moment and try again.')
+      return
+    }
+    if (!turnstileToken && turnstileFailed) {
+      toast.error('Please complete the captcha verification below.')
       return
     }
 

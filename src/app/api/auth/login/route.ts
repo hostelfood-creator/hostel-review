@@ -1,14 +1,13 @@
 import { NextResponse } from 'next/server'
-import { createServerClient } from '@supabase/ssr'
-import { cookies } from 'next/headers'
-import { checkRateLimitAsync, getClientIp, rateLimitResponse } from '@/lib/rate-limit'
+import { checkRateLimit, getClientIp, rateLimitResponse } from '@/lib/rate-limit'
 import { createServiceClient } from '@/lib/supabase/service'
+import { createAuthClient, attachCookies } from '@/lib/supabase/auth-cookies'
 import { verifyTurnstileToken } from '@/lib/turnstile'
 
 export async function POST(request: Request) {
   // Rate limit: 10 attempts per 15 minutes per IP (Redis-backed in production)
   const ip = getClientIp(request)
-  const rl = await checkRateLimitAsync(`login:${ip}`, 10, 15 * 60 * 1000)
+  const rl = await checkRateLimit(`login:${ip}`, 10, 15 * 60 * 1000)
   if (!rl.allowed) return rateLimitResponse(rl.resetAt)
 
   try {
@@ -64,29 +63,7 @@ export async function POST(request: Request) {
     }
 
     // ── Phase 3: Authenticate ────────────────────────────────────────
-    const cookieStore = await cookies()
-    const pendingCookies: Array<{ name: string; value: string; options: Record<string, unknown> }> = []
-
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-    if (!supabaseUrl || !supabaseAnonKey) {
-      return NextResponse.json({ error: 'Server configuration error' }, { status: 500 })
-    }
-
-    const supabase = createServerClient(
-      supabaseUrl,
-      supabaseAnonKey,
-      {
-        cookies: {
-          getAll() {
-            return cookieStore.getAll()
-          },
-          setAll(cookiesToSet) {
-            cookiesToSet.forEach((c) => pendingCookies.push(c))
-          },
-        },
-      }
-    )
+    const { supabase, pendingCookies } = await createAuthClient()
 
     const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
       email: authEmail,
@@ -164,14 +141,7 @@ export async function POST(request: Request) {
     // Attach every auth cookie Supabase generated to the response.
     // "Remember Me" unchecked → session cookie (expires when browser closes).
     // "Remember Me" checked   → keep Supabase's default maxAge (persistent).
-    for (const { name, value, options } of pendingCookies) {
-      const cookieOpts = { ...options } as Record<string, unknown>
-      if (!extendSession) {
-        delete cookieOpts.maxAge
-        delete cookieOpts.expires
-      }
-      response.cookies.set(name, value, cookieOpts as any)
-    }
+    attachCookies(response, pendingCookies, !extendSession)
 
     return response
   } catch (error) {

@@ -1,12 +1,12 @@
 import { NextResponse } from 'next/server'
 import crypto from 'crypto'
-import { checkRateLimitAsync, getClientIp, rateLimitResponse } from '@/lib/rate-limit'
+import { checkRateLimit, getClientIp, rateLimitResponse } from '@/lib/rate-limit'
 import { createServiceClient } from '@/lib/supabase/service'
 
 export async function POST(request: Request) {
     // Rate limit: 5 OTP verify attempts per 15 minutes per IP (Redis-backed in production)
     const ip = getClientIp(request)
-    const rl = await checkRateLimitAsync(`otp-verify:${ip}`, 5, 15 * 60 * 1000)
+    const rl = await checkRateLimit(`otp-verify:${ip}`, 5, 15 * 60 * 1000)
     if (!rl.allowed) return rateLimitResponse(rl.resetAt)
 
     // Per-account rate limit — 5 attempts per 15 min per account identifier (checked before OTP query)
@@ -26,7 +26,7 @@ export async function POST(request: Request) {
         // Per-account rate limit BEFORE OTP lookup — prevents brute-force even with wrong OTPs
         // Key must match the same identifier used in the DB query (email if present, else registerId)
         const acctIdentifier = isEmailLookup ? lookupEmail : lookupRegId
-        const acctRl = await checkRateLimitAsync(`otp-verify-acct:${acctIdentifier}`, 5, 15 * 60 * 1000)
+        const acctRl = await checkRateLimit(`otp-verify-acct:${acctIdentifier}`, 5, 15 * 60 * 1000)
         if (!acctRl.allowed) return rateLimitResponse(acctRl.resetAt)
         if (!otp || !newPassword) {
             return NextResponse.json({ error: 'OTP and new password are required' }, { status: 400 })

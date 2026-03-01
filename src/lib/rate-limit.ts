@@ -25,6 +25,16 @@ const UPSTASH_URL = process.env.UPSTASH_REDIS_REST_URL
 const UPSTASH_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN
 const USE_REDIS = Boolean(UPSTASH_URL && UPSTASH_TOKEN)
 
+// Enforce Redis in production — in-memory rate limiting is per-process
+// and trivially bypassed across multiple serverless instances.
+if (process.env.NODE_ENV === 'production' && !USE_REDIS) {
+  console.warn(
+    '[rate-limit] WARNING: UPSTASH_REDIS_REST_URL / UPSTASH_REDIS_REST_TOKEN not set. ' +
+    'Rate limiting is in-memory only and will NOT work across serverless instances. ' +
+    'Set these env vars for production deployments.'
+  )
+}
+
 // ── Redis backend (Upstash) ──────────────────────────────────────────────────
 
 let redis: Redis | null = null
@@ -68,15 +78,18 @@ interface RateLimitEntry {
 const MAX_STORE_SIZE = 50_000
 const memStore = new Map<string, RateLimitEntry>()
 
-// Clean up stale entries every 5 minutes
-if (typeof globalThis !== 'undefined') {
-  const cleanup = () => {
-    const now = Date.now()
-    for (const [key, entry] of memStore.entries()) {
-      if (now > entry.resetAt) memStore.delete(key)
-    }
+// Lazy cleanup: runs inline when the store exceeds threshold,
+// avoiding a persistent setInterval that wastes resources in serverless.
+let lastCleanup = Date.now()
+const CLEANUP_INTERVAL_MS = 5 * 60 * 1000
+
+function maybeCleanup() {
+  const now = Date.now()
+  if (now - lastCleanup < CLEANUP_INTERVAL_MS) return
+  lastCleanup = now
+  for (const [key, entry] of memStore.entries()) {
+    if (now > entry.resetAt) memStore.delete(key)
   }
-  setInterval(cleanup, 5 * 60 * 1000)
 }
 
 function memoryRateLimit(
@@ -84,6 +97,7 @@ function memoryRateLimit(
   limit: number,
   windowMs: number
 ): { allowed: boolean; remaining: number; resetAt: number } {
+  maybeCleanup()
   const now = Date.now()
   const entry = memStore.get(key)
 
@@ -129,29 +143,6 @@ function memoryRateLimit(
  * @returns { allowed: boolean, remaining: number, resetAt: number }
  */
 export async function checkRateLimit(
-  key: string,
-  limit: number,
-  windowMs: number
-): Promise<{ allowed: boolean; remaining: number; resetAt: number }> {
-  if (USE_REDIS) {
-    const limiter = getUpstashLimiter(limit, windowMs)
-    const result = await limiter.limit(key)
-    return {
-      allowed: result.success,
-      remaining: result.remaining,
-      resetAt: result.reset,
-    }
-  }
-  return memoryRateLimit(key, limit, windowMs)
-}
-
-/**
- * Async rate limit check — fully Redis-backed for maximum accuracy.
- * Use this in API routes where you can await (recommended for production).
- *
- * Falls back to synchronous in-memory if Redis is not configured.
- */
-export async function checkRateLimitAsync(
   key: string,
   limit: number,
   windowMs: number

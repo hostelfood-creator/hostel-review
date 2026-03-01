@@ -48,6 +48,51 @@ interface MealCheckinRow {
   hostel_block: string | null
 }
 
+// ── Shared profile enrichment helper ─────────────────────────────────────────
+
+/**
+ * Resolve profile data for a set of user IDs via the service client (bypasses RLS).
+ *
+ * SECURITY — AUTHORIZATION CONTRACT:
+ * This function intentionally uses the service-role client because RLS correctly
+ * blocks students from reading other students' profiles. Authorization is NOT
+ * enforced here — it MUST be enforced by every calling route:
+ *   - getReviews() → called by /api/reviews (admin-only, verified before call)
+ *   - getReviewsForAnalytics() → called by /api/analytics (admin/super_admin only)
+ * Only non-sensitive display fields are fetched (name, hostel_block, register_id,
+ * department, year). Sensitive fields (email, role) are never exposed.
+ * DO NOT call this function from student-facing routes without authorization checks.
+ */
+type ProfileFields = 'name' | 'hostel_block' | 'register_id' | 'department' | 'year'
+type ProfileInfo = Pick<ProfileRow, 'name' | 'hostel_block' | 'register_id' | 'department' | 'year'>
+
+async function enrichWithProfiles(
+  userIds: string[],
+  fields: ProfileFields[] = ['name', 'hostel_block', 'register_id', 'department', 'year'],
+): Promise<Map<string, Partial<ProfileInfo>>> {
+  const profileMap = new Map<string, Partial<ProfileInfo>>()
+  if (userIds.length === 0) return profileMap
+
+  const serviceDb = createServiceClient()
+  const selectCols = ['id', ...fields].join(', ')
+  const { data: profiles } = await serviceDb
+    .from('profiles')
+    .select(selectCols)
+    .in('id', userIds)
+
+  for (const p of (profiles || []) as unknown as Array<Record<string, string | null>>) {
+    const entry: Partial<ProfileInfo> = {}
+    if (fields.includes('name')) entry.name = p.name ?? ''
+    if (fields.includes('hostel_block')) entry.hostel_block = p.hostel_block ?? null
+    if (fields.includes('register_id')) entry.register_id = p.register_id ?? null
+    if (fields.includes('department')) entry.department = p.department ?? null
+    if (fields.includes('year')) entry.year = p.year ?? null
+    profileMap.set(p.id as string, entry)
+  }
+
+  return profileMap
+}
+
 // ── Users ─────────────────────────────────────────────────
 
 export async function getUserByRegisterId(registerId: string) {
@@ -144,23 +189,12 @@ export async function getReviews(filters: {
   if (error || !data) return { data: [], total: 0 }
   const total = count ?? data.length
 
-  // Resolve profile names/blocks via SERVICE ROLE client (bypasses RLS)
-  // SECURITY: This is intentional — RLS correctly blocks students from reading other users'
-  // profiles, but admins need to see reviewer names. Authorization is enforced by the calling
-  // API routes (/api/reviews, /api/analytics) which check roles before calling this function.
-  // Only non-sensitive display fields are fetched (name, hostel_block, register_id, department, year).
-  const serviceDb = createServiceClient()
-  const uniqueUserIds = [...new Set(data.map((r) => r.user_id))]
-  const profileMap = new Map<string, { name: string; hostel_block: string | null; register_id: string | null; department: string | null; year: string | null }>()
-  if (uniqueUserIds.length > 0) {
-    const { data: profiles } = await serviceDb
-      .from('profiles')
-      .select('id, name, hostel_block, register_id, department, year')
-      .in('id', uniqueUserIds)
-      ; (profiles || []).forEach((p) => profileMap.set(p.id, { name: p.name, hostel_block: p.hostel_block, register_id: p.register_id, department: p.department, year: p.year }))
-  }
+  // Resolve profile names/blocks via shared helper (uses service client, bypasses RLS)
+  // SECURITY: Authorization is enforced by the calling API routes which check roles.
+  const uniqueUserIds = [...new Set((data as ReviewRow[]).map((r) => r.user_id))]
+  const profileMap = await enrichWithProfiles(uniqueUserIds)
 
-  const mapped = data.map((r) => {
+  const mapped = (data as ReviewRow[]).map((r) => {
     const profile = profileMap.get(r.user_id)
     return {
       ...r,
@@ -257,21 +291,12 @@ export async function getReviewsForAnalytics(
   const { data, error } = await query
   if (error || !data) return []
 
-  // Resolve profiles via SERVICE ROLE client (bypasses RLS)
-  // SECURITY: Intentional — caller (/api/analytics) enforces admin-only access. Service role
-  // needed because RLS blocks cross-user profile reads. Only display fields fetched.
-  const serviceDb = createServiceClient()
-  const uniqueUserIds = [...new Set(data.map((r) => r.user_id))]
-  const profileMap = new Map<string, { name: string; hostel_block: string | null; register_id: string | null }>()
-  if (uniqueUserIds.length > 0) {
-    const { data: profiles } = await serviceDb
-      .from('profiles')
-      .select('id, name, hostel_block, register_id')
-      .in('id', uniqueUserIds)
-      ; (profiles || []).forEach((p) => profileMap.set(p.id, { name: p.name, hostel_block: p.hostel_block, register_id: p.register_id }))
-  }
+  // Resolve profiles via shared helper (uses service client, bypasses RLS)
+  // SECURITY: Caller (/api/analytics) enforces admin-only access.
+  const uniqueUserIds = [...new Set((data as ReviewRow[]).map((r) => r.user_id))]
+  const profileMap = await enrichWithProfiles(uniqueUserIds, ['name', 'hostel_block', 'register_id'])
 
-  return data.map((r) => {
+  return (data as ReviewRow[]).map((r) => {
     const profile = profileMap.get(r.user_id)
     return {
       ...r,

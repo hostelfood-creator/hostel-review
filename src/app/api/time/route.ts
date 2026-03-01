@@ -20,7 +20,6 @@ export async function GET(request: Request) {
     const formatter = new Intl.DateTimeFormat('en-US', {
         timeZone: TZ,
         year: 'numeric', month: '2-digit', day: '2-digit',
-        hour: '2-digit', minute: '2-digit', hour12: false,
         weekday: 'long',
     })
     const parts = Object.fromEntries(
@@ -31,8 +30,6 @@ export async function GET(request: Request) {
     const day = parseInt(parts.day!, 10)
     const monthShort = new Intl.DateTimeFormat('en-US', { timeZone: TZ, month: 'short' }).format(now)
     const year = parseInt(parts.year!, 10)
-    const hours = parseInt(parts.hour!, 10)
-    const minutes = parseInt(parts.minute!, 10)
 
     return NextResponse.json({
         date: dateStr,
@@ -41,8 +38,6 @@ export async function GET(request: Request) {
         day,
         month: monthShort,
         year,
-        hours,
-        minutes,
         timestamp: now.getTime(),
     })
 }

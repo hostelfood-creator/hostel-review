@@ -55,6 +55,13 @@ export const viewport: Viewport = {
   themeColor: [{ media: '(prefers-color-scheme: dark)', color: '#000000' }, { media: '(prefers-color-scheme: light)', color: '#ffffff' }],
 }
 
+/**
+ * SECURITY: This script runs before first paint to prevent theme FOUC.
+ * It MUST remain a static string literal — NEVER interpolate user input.
+ * The CSP nonce ensures only this exact script runs inline.
+ */
+const THEME_INIT_SCRIPT = `(function(){try{var t=localStorage.getItem('theme');if(t==='light'){document.documentElement.classList.remove('dark')}else{document.documentElement.classList.add('dark')}}catch(e){}})();`
+
 export default async function RootLayout({
   children,
 }: {
@@ -70,9 +77,7 @@ export default async function RootLayout({
         <script
           nonce={nonce}
           suppressHydrationWarning
-          dangerouslySetInnerHTML={{
-            __html: `(function(){try{var t=localStorage.getItem('theme');if(t==='light'){document.documentElement.classList.remove('dark')}else{document.documentElement.classList.add('dark')}}catch(e){}})();`,
-          }}
+          dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }}
         />
       </head>
       <body className="min-h-screen bg-background text-foreground font-sans antialiased transition-colors duration-200">

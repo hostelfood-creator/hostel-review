@@ -4,6 +4,105 @@ import { getReviewsForAnalytics, getStudentHostelBlocks } from '@/lib/db'
 import { createServiceClient } from '@/lib/supabase/service'
 import { checkRateLimit, getClientIp, rateLimitResponse } from '@/lib/rate-limit'
 
+// ── Types ────────────────────────────────────────────────────────────────────
+
+interface ReviewRecord {
+  rating: number
+  sentiment: string | null
+  userId: string
+  date: string
+  mealType: string
+  hostelBlock: string | null
+}
+
+interface SpecialMenu {
+  date: string
+  special_label: string
+}
+
+interface AggregationResult {
+  totalReviews: number
+  ratingSum: number
+  lowRatings: number
+  positiveSentiment: number
+  neutralSentiment: number
+  negativeSentiment: number
+  specialRatingSum: number
+  specialReviewCount: number
+  normalRatingSum: number
+  normalReviewCount: number
+  uniqueStudents: Set<string>
+  dailyMap: Map<string, { total: number; count: number }>
+  mealMap: Map<string, { total: number; count: number }>
+  blockMap: Map<string, { total: number; count: number; positive: number; negative: number }>
+}
+
+// ── Aggregation helpers ──────────────────────────────────────────────────────
+
+function aggregateReviews(
+  reviews: ReviewRecord[],
+  specialDates: Set<string>,
+  isSuperAdmin: boolean,
+): AggregationResult {
+  const result: AggregationResult = {
+    totalReviews: reviews.length,
+    ratingSum: 0,
+    lowRatings: 0,
+    positiveSentiment: 0,
+    neutralSentiment: 0,
+    negativeSentiment: 0,
+    specialRatingSum: 0,
+    specialReviewCount: 0,
+    normalRatingSum: 0,
+    normalReviewCount: 0,
+    uniqueStudents: new Set(),
+    dailyMap: new Map(),
+    mealMap: new Map(),
+    blockMap: new Map(),
+  }
+
+  for (const r of reviews) {
+    const rating = r.rating
+    result.ratingSum += rating
+    if (rating <= 2) result.lowRatings++
+
+    if (r.sentiment === 'positive') result.positiveSentiment++
+    else if (r.sentiment === 'neutral') result.neutralSentiment++
+    else if (r.sentiment === 'negative') result.negativeSentiment++
+
+    result.uniqueStudents.add(r.userId)
+
+    const daily = result.dailyMap.get(r.date)
+    if (daily) { daily.total += rating; daily.count++ }
+    else result.dailyMap.set(r.date, { total: rating, count: 1 })
+
+    const meal = result.mealMap.get(r.mealType)
+    if (meal) { meal.total += rating; meal.count++ }
+    else result.mealMap.set(r.mealType, { total: rating, count: 1 })
+
+    if (specialDates.has(r.date)) { result.specialRatingSum += rating; result.specialReviewCount++ }
+    else { result.normalRatingSum += rating; result.normalReviewCount++ }
+
+    if (isSuperAdmin) {
+      const block = r.hostelBlock || 'Unknown'
+      const existing = result.blockMap.get(block)
+      if (existing) {
+        existing.total += rating; existing.count++
+        if (r.sentiment === 'positive') existing.positive++
+        if (r.sentiment === 'negative') existing.negative++
+      } else {
+        result.blockMap.set(block, {
+          total: rating, count: 1,
+          positive: r.sentiment === 'positive' ? 1 : 0,
+          negative: r.sentiment === 'negative' ? 1 : 0,
+        })
+      }
+    }
+  }
+
+  return result
+}
+
 export async function GET(request: Request) {
   try {
     // Rate limit: 30 analytics requests per minute per IP
@@ -45,7 +144,6 @@ export async function GET(request: Request) {
     startDate.setDate(startDate.getDate() - days)
     const startDateStr = startDate.toISOString().split('T')[0]
 
-    /* eslint-disable @typescript-eslint/no-explicit-any */
     // Fetch reviews and special menus in parallel
     const serviceDb = createServiceClient()
     const [reviews, specialMenusResult] = await Promise.all([
@@ -55,76 +153,25 @@ export async function GET(request: Request) {
         .select('date, special_label')
         .gte('date', startDateStr)
         .not('special_label', 'is', null),
-    ]) as [any[], any]
+    ])
 
-    const specialMenus = specialMenusResult.data || []
-    const specialDates = new Set<string>(specialMenus.map((m: { date: string }) => m.date))
+    const specialMenus: SpecialMenu[] = (specialMenusResult.data || []) as SpecialMenu[]
+    const specialDates = new Set<string>(specialMenus.map((m) => m.date))
     const specialLabelsMap = new Map<string, string>()
-    specialMenus.forEach((m: { date: string; special_label: string }) => {
+    specialMenus.forEach((m) => {
       if (!specialLabelsMap.has(m.date)) specialLabelsMap.set(m.date, m.special_label)
     })
 
-    // --- Single-pass aggregation over reviews ---
-    const totalReviews = reviews.length
-    let ratingSum = 0
-    let lowRatings = 0
-    let positiveSentiment = 0
-    let neutralSentiment = 0
-    let negativeSentiment = 0
-    let specialRatingSum = 0
-    let specialReviewCount = 0
-    let normalRatingSum = 0
-    let normalReviewCount = 0
-    const uniqueStudents = new Set<string>()
-    const dailyMap = new Map<string, { total: number; count: number }>()
-    const mealMap = new Map<string, { total: number; count: number }>()
-    const blockMap = new Map<string, { total: number; count: number; positive: number; negative: number }>()
+    // Single-pass aggregation via extracted helper
     const isSuperAdmin = profile.role === 'super_admin'
+    const agg = aggregateReviews(reviews as ReviewRecord[], specialDates, isSuperAdmin)
 
-    for (const r of reviews) {
-      const rating: number = r.rating
-      ratingSum += rating
-      if (rating <= 2) lowRatings++
-
-      // Sentiment
-      if (r.sentiment === 'positive') positiveSentiment++
-      else if (r.sentiment === 'neutral') neutralSentiment++
-      else if (r.sentiment === 'negative') negativeSentiment++
-
-      // Unique students
-      uniqueStudents.add(r.userId)
-
-      // Daily aggregation
-      const daily = dailyMap.get(r.date)
-      if (daily) { daily.total += rating; daily.count++ }
-      else dailyMap.set(r.date, { total: rating, count: 1 })
-
-      // Meal aggregation
-      const meal = mealMap.get(r.mealType)
-      if (meal) { meal.total += rating; meal.count++ }
-      else mealMap.set(r.mealType, { total: rating, count: 1 })
-
-      // Special vs normal day
-      if (specialDates.has(r.date)) { specialRatingSum += rating; specialReviewCount++ }
-      else { normalRatingSum += rating; normalReviewCount++ }
-
-      // Per-block for super admin
-      if (isSuperAdmin) {
-        const block = r.hostelBlock || 'Unknown'
-        const existing = blockMap.get(block)
-        if (existing) {
-          existing.total += rating; existing.count++
-          if (r.sentiment === 'positive') existing.positive++
-          if (r.sentiment === 'negative') existing.negative++
-        } else {
-          blockMap.set(block, {
-            total: rating, count: 1,
-            positive: r.sentiment === 'positive' ? 1 : 0,
-            negative: r.sentiment === 'negative' ? 1 : 0,
-          })
-        }
-      }
-    }
+    const {
+      totalReviews, ratingSum, lowRatings,
+      positiveSentiment, neutralSentiment, negativeSentiment,
+      specialRatingSum, specialReviewCount, normalRatingSum, normalReviewCount,
+      uniqueStudents, dailyMap, mealMap, blockMap,
+    } = agg
 
     const avgRating = totalReviews > 0 ? ratingSum / totalReviews : 0
     const alertCount = avgRating < 2.5 || lowRatings / Math.max(totalReviews, 1) > 0.3 ? 1 : 0
@@ -180,7 +227,6 @@ export async function GET(request: Request) {
         }))
         .sort((a, b) => b.totalReviews - a.totalReviews)
     }
-    /* eslint-enable @typescript-eslint/no-explicit-any */
 
     return NextResponse.json({
       overview: {

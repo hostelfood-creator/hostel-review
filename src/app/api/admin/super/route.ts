@@ -2,11 +2,157 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createServiceClient } from '@/lib/supabase/service'
 import { checkRateLimit, getClientIp, rateLimitResponse } from '@/lib/rate-limit'
+import type { SupabaseClient } from '@supabase/supabase-js'
 
 /**
  * Super Admin API — manage hostel blocks and admin users
  * Only accessible by users with role 'super_admin'
  */
+
+// ── Action handlers ──────────────────────────────────────────────────────────
+
+type ActionResult = { json: Record<string, unknown>; status?: number }
+
+async function handleAddBlock(
+  supabase: SupabaseClient,
+  body: Record<string, unknown>,
+): Promise<ActionResult> {
+  const { name } = body
+  if (!name || !(name as string).trim()) {
+    return { json: { error: 'Block name is required' }, status: 400 }
+  }
+  const { error } = await supabase
+    .from('hostel_blocks')
+    .insert({ name: (name as string).trim().toUpperCase() })
+  if (error) {
+    if (error.code === '23505') return { json: { error: 'Block already exists' }, status: 409 }
+    console.error('Block creation error:', error.message)
+    return { json: { error: 'Failed to create block' }, status: 500 }
+  }
+  return { json: { success: true } }
+}
+
+async function handleRemoveBlock(
+  supabase: SupabaseClient,
+  body: Record<string, unknown>,
+): Promise<ActionResult> {
+  const { id } = body
+  if (!id) return { json: { error: 'Block ID is required' }, status: 400 }
+  const { error } = await supabase.from('hostel_blocks').delete().eq('id', id)
+  if (error) {
+    console.error('Block deletion error:', error.message)
+    return { json: { error: 'Failed to remove block' }, status: 500 }
+  }
+  return { json: { success: true } }
+}
+
+async function handleAddAdmin(
+  body: Record<string, unknown>,
+): Promise<ActionResult> {
+  const { registerId, name, password, hostelBlock, role: newRole } = body as Record<string, string | undefined>
+  if (!registerId || !name || !password) {
+    return { json: { error: 'Register ID, name, and password are required' }, status: 400 }
+  }
+  if (password.length < 8) return { json: { error: 'Password must be at least 8 characters long' }, status: 400 }
+  if (password.length > 128) return { json: { error: 'Password must be at most 128 characters long' }, status: 400 }
+
+  const trimmedName = name.trim()
+  if (trimmedName.length < 2 || trimmedName.length > 60) {
+    return { json: { error: 'Name must be between 2 and 60 characters' }, status: 400 }
+  }
+
+  const trimmedRegisterId = registerId.trim()
+  if (trimmedRegisterId.length < 2 || trimmedRegisterId.length > 30) {
+    return { json: { error: 'Register ID must be between 2 and 30 characters' }, status: 400 }
+  }
+  if (!/^[A-Za-z0-9]+$/.test(trimmedRegisterId)) {
+    return { json: { error: 'Register ID must be alphanumeric' }, status: 400 }
+  }
+
+  const allowedRoles = ['admin', 'super_admin']
+  if (!newRole || !allowedRoles.includes(newRole)) {
+    return { json: { error: 'Role must be "admin" or "super_admin"' }, status: 400 }
+  }
+  const targetRole = newRole
+
+  const authEmail = `${trimmedRegisterId.toLowerCase()}@kanchiuniv.ac.in`
+  const serviceDb = createServiceClient()
+  const { data: authData, error: authError } = await serviceDb.auth.admin.createUser({
+    email: authEmail,
+    password,
+    email_confirm: true,
+  })
+
+  if (authError) {
+    console.error('Admin auth creation error:', authError.message)
+    const safeMessage = authError.message.toLowerCase().includes('already registered')
+      ? 'This Register ID is already registered'
+      : 'Failed to create admin user'
+    return { json: { error: safeMessage }, status: 400 }
+  }
+
+  if (!authData.user) return { json: { error: 'Failed to create user' }, status: 500 }
+
+  const { error: profileError } = await serviceDb.from('profiles').insert({
+    id: authData.user.id,
+    register_id: trimmedRegisterId.toUpperCase(),
+    name: trimmedName,
+    email: authEmail,
+    role: targetRole,
+    hostel_block: (targetRole === 'admin' && hostelBlock) ? String(hostelBlock).trim() : null,
+  })
+
+  if (profileError) {
+    await serviceDb.auth.admin.deleteUser(authData.user.id)
+    console.error('Admin profile creation error:', profileError.message)
+    return { json: { error: 'Failed to create admin profile' }, status: 500 }
+  }
+
+  return { json: { success: true, role: targetRole } }
+}
+
+async function handleRemoveAdmin(
+  supabase: SupabaseClient,
+  body: Record<string, unknown>,
+  currentUserId: string,
+): Promise<ActionResult> {
+  const { id } = body
+  if (!id) return { json: { error: 'Admin ID is required' }, status: 400 }
+  if (id === currentUserId) return { json: { error: 'Cannot remove yourself' }, status: 400 }
+
+  const { data: targetProfile } = await supabase
+    .from('profiles')
+    .select('role')
+    .eq('id', id)
+    .single()
+
+  if (!targetProfile || !['admin', 'super_admin'].includes(targetProfile.role)) {
+    return { json: { error: 'Target user is not an admin' }, status: 400 }
+  }
+
+  const serviceDb = createServiceClient()
+  const { error: authDeleteError } = await serviceDb.auth.admin.deleteUser(id as string)
+  if (authDeleteError) {
+    console.error('Admin deletion error:', authDeleteError.message)
+    return { json: { error: 'Failed to remove admin' }, status: 500 }
+  }
+
+  // Defensive cleanup: ensure profile is gone (guards against misconfigured CASCADE)
+  await serviceDb.from('profiles').delete().eq('id', id)
+  return { json: { success: true } }
+}
+
+// ── Action dispatch map ──────────────────────────────────────────────────────
+
+const ACTION_HANDLERS: Record<
+  string,
+  (supabase: SupabaseClient, body: Record<string, unknown>, userId: string) => Promise<ActionResult>
+> = {
+  add_block: (supabase, body) => handleAddBlock(supabase, body),
+  remove_block: (supabase, body) => handleRemoveBlock(supabase, body),
+  add_admin: (_supabase, body) => handleAddAdmin(body),
+  remove_admin: (supabase, body, userId) => handleRemoveAdmin(supabase, body, userId),
+}
 
 // GET — list hostel blocks and admins
 export async function GET(request: Request) {
@@ -100,166 +246,11 @@ export async function POST(request: Request) {
     const body = await request.json()
     const { action } = body
 
-    // Add hostel block
-    if (action === 'add_block') {
-        const { name } = body
-        if (!name || !name.trim()) {
-            return NextResponse.json({ error: 'Block name is required' }, { status: 400 })
-        }
-
-        const { error } = await supabase
-            .from('hostel_blocks')
-            .insert({ name: name.trim().toUpperCase() })
-
-        if (error) {
-            if (error.code === '23505') {
-                return NextResponse.json({ error: 'Block already exists' }, { status: 409 })
-            }
-            console.error('Block creation error:', error.message)
-            return NextResponse.json({ error: 'Failed to create block' }, { status: 500 })
-        }
-
-        return NextResponse.json({ success: true })
+    const handler = ACTION_HANDLERS[action]
+    if (!handler) {
+        return NextResponse.json({ error: 'Invalid action' }, { status: 400 })
     }
 
-    // Remove hostel block
-    if (action === 'remove_block') {
-        const { id } = body
-        if (!id) {
-            return NextResponse.json({ error: 'Block ID is required' }, { status: 400 })
-        }
-
-        const { error } = await supabase
-            .from('hostel_blocks')
-            .delete()
-            .eq('id', id)
-
-        if (error) {
-            console.error('Block deletion error:', error.message)
-            return NextResponse.json({ error: 'Failed to remove block' }, { status: 500 })
-        }
-
-        return NextResponse.json({ success: true })
-    }
-
-    // Add admin
-    if (action === 'add_admin') {
-        const { registerId, name, password, hostelBlock, role: newRole } = body
-        if (!registerId || !name || !password) {
-            return NextResponse.json({ error: 'Register ID, name, and password are required' }, { status: 400 })
-        }
-
-        // Password validation
-        if (password.length < 8) {
-            return NextResponse.json({ error: 'Password must be at least 8 characters long' }, { status: 400 })
-        }
-        if (password.length > 128) {
-            return NextResponse.json({ error: 'Password must be at most 128 characters long' }, { status: 400 })
-        }
-
-        // Name length validation
-        const trimmedName = name.trim()
-        if (trimmedName.length < 2 || trimmedName.length > 60) {
-            return NextResponse.json({ error: 'Name must be between 2 and 60 characters' }, { status: 400 })
-        }
-
-        // Register ID format validation
-        const trimmedRegisterId = registerId.trim()
-        if (trimmedRegisterId.length < 2 || trimmedRegisterId.length > 30) {
-            return NextResponse.json({ error: 'Register ID must be between 2 and 30 characters' }, { status: 400 })
-        }
-        if (!/^[A-Za-z0-9]+$/.test(trimmedRegisterId)) {
-            return NextResponse.json({ error: 'Register ID must be alphanumeric' }, { status: 400 })
-        }
-
-        // Validate role — only allow admin or super_admin; reject anything else explicitly
-        const allowedRoles = ['admin', 'super_admin']
-        if (!newRole || !allowedRoles.includes(newRole)) {
-            return NextResponse.json({ error: 'Role must be "admin" or "super_admin"' }, { status: 400 })
-        }
-        const targetRole = newRole
-
-        // Use registerId@kanchiuniv.ac.in as the auth email so that auth.users
-        // always has a real-looking, consistent email (no synthetic @hostel.local).
-        const authEmail = `${trimmedRegisterId.toLowerCase()}@kanchiuniv.ac.in`
-
-        // Use service role client to create auth user.
-        // email_confirm: true auto-verifies the email (skips confirmation step).
-        const serviceDb = createServiceClient()
-        const { data: authData, error: authError } = await serviceDb.auth.admin.createUser({
-            email: authEmail,
-            password,
-            email_confirm: true,
-        })
-
-        if (authError) {
-            console.error('Admin auth creation error:', authError.message)
-            const safeMessage = authError.message.toLowerCase().includes('already registered')
-                ? 'This Register ID is already registered'
-                : 'Failed to create admin user'
-            return NextResponse.json({ error: safeMessage }, { status: 400 })
-        }
-
-        if (!authData.user) {
-            return NextResponse.json({ error: 'Failed to create user' }, { status: 500 })
-        }
-
-        const { error: profileError } = await serviceDb.from('profiles').insert({
-            id: authData.user.id,
-            register_id: trimmedRegisterId.toUpperCase(),
-            name: trimmedName,
-            email: authEmail,
-            role: targetRole,
-            hostel_block: (targetRole === 'admin' && hostelBlock) ? String(hostelBlock).trim() : null,
-        })
-
-        if (profileError) {
-            // Rollback: delete the auth user if profile creation fails
-            await serviceDb.auth.admin.deleteUser(authData.user.id)
-            console.error('Admin profile creation error:', profileError.message)
-            return NextResponse.json({ error: 'Failed to create admin profile' }, { status: 500 })
-        }
-
-        return NextResponse.json({ success: true, role: targetRole })
-    }
-
-    // Remove admin
-    if (action === 'remove_admin') {
-        const { id } = body
-        if (!id) {
-            return NextResponse.json({ error: 'Admin ID is required' }, { status: 400 })
-        }
-
-        // Don't allow removing yourself
-        if (id === user.id) {
-            return NextResponse.json({ error: 'Cannot remove yourself' }, { status: 400 })
-        }
-
-        // Verify target is actually an admin/super_admin — prevent deleting student accounts
-        const { data: targetProfile } = await supabase
-            .from('profiles')
-            .select('role')
-            .eq('id', id)
-            .single()
-
-        if (!targetProfile || !['admin', 'super_admin'].includes(targetProfile.role)) {
-            return NextResponse.json({ error: 'Target user is not an admin' }, { status: 400 })
-        }
-
-        // Delete the auth user — FK CASCADE (profiles.id → auth.users.id ON DELETE CASCADE)
-        // automatically removes the profile row and all dependent records.
-        const serviceDb = createServiceClient()
-        const { error: authDeleteError } = await serviceDb.auth.admin.deleteUser(id)
-        if (authDeleteError) {
-            console.error('Admin deletion error:', authDeleteError.message)
-            return NextResponse.json({ error: 'Failed to remove admin' }, { status: 500 })
-        }
-
-        // Defensive cleanup: ensure profile is gone (guards against misconfigured CASCADE)
-        await serviceDb.from('profiles').delete().eq('id', id)
-
-        return NextResponse.json({ success: true })
-    }
-
-    return NextResponse.json({ error: 'Invalid action' }, { status: 400 })
+    const result = await handler(supabase, body, user.id)
+    return NextResponse.json(result.json, { status: result.status || 200 })
 }

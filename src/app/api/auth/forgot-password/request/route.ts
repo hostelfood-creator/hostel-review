@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import crypto from 'crypto'
-import { checkRateLimitAsync, getClientIp, rateLimitResponse } from '@/lib/rate-limit'
+import { checkRateLimit, getClientIp, rateLimitResponse } from '@/lib/rate-limit'
 import { getTransporter, getSender } from '@/lib/email'
 import { createServiceClient } from '@/lib/supabase/service'
 import { verifyTurnstileToken } from '@/lib/turnstile'
@@ -172,7 +172,7 @@ function buildOtpEmail(name: string, registerId: string, otp: string): string {
 export async function POST(request: Request) {
   // Rate limit: 3 OTP requests per 15 minutes per IP (Redis-backed in production)
   const ip = getClientIp(request)
-  const rl = await checkRateLimitAsync(`otp-request:${ip}`, 3, 15 * 60 * 1000)
+  const rl = await checkRateLimit(`otp-request:${ip}`, 3, 15 * 60 * 1000)
   if (!rl.allowed) return rateLimitResponse(rl.resetAt)
 
   try {
@@ -223,18 +223,14 @@ export async function POST(request: Request) {
     const profile = profiles?.[0]
     const registerId = profile?.register_id
 
-    if (!profile || !registerId) {
-      return NextResponse.json(
-        { error: 'No account found with that email address. Please check your email or register first.' },
-        { status: 404 }
-      )
-    }
+    // SECURITY: Return a uniform response for all outcomes to prevent account enumeration.
+    // Attackers must not be able to distinguish "no account", "no email", or "success".
+    const uniformResponse = { message: 'If an account exists with that identifier, a verification code has been sent.' }
 
-    if (!profile.email) {
-      return NextResponse.json(
-        { error: 'No email address is linked to this account. Please contact the hostel admin.' },
-        { status: 400 }
-      )
+    if (!profile || !registerId || !profile.email) {
+      // Silently succeed — log for internal debugging only
+      console.info('[forgot-password] No actionable profile for lookup:', isEmail ? 'email' : 'register_id')
+      return NextResponse.json(uniformResponse)
     }
 
     // 3. Generate 6-digit OTP (higher entropy — 1M combinations vs 10K for 4-digit)
@@ -258,7 +254,8 @@ export async function POST(request: Request) {
 
     if (insertError) {
       console.error('Failed to store OTP:', insertError)
-      return NextResponse.json({ error: 'Failed to process request' }, { status: 500 })
+      // Still return uniform response to avoid leaking state
+      return NextResponse.json(uniformResponse)
     }
 
     // 5. Send professional HTML email via SMTP (reused transporter with connection pooling)
@@ -272,7 +269,7 @@ export async function POST(request: Request) {
       html: buildOtpEmail(profile.name, registerId, otp),
     })
 
-    return NextResponse.json({ message: 'OTP sent successfully' })
+    return NextResponse.json(uniformResponse)
   } catch (error) {
     console.error('Forgot password error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

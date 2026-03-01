@@ -186,9 +186,13 @@ USE_REDIS=true
 UPSTASH_REDIS_REST_URL=https://your-redis.upstash.io
 UPSTASH_REDIS_REST_TOKEN=your-redis-token
 
-# ── Cloudflare Turnstile (Bot Protection) ────────
+# ── Cloudflare Turnstile (Bot Protection — Primary) ───
 NEXT_PUBLIC_TURNSTILE_SITE_KEY=your-turnstile-site-key
 TURNSTILE_SECRET_KEY=your-turnstile-secret-key
+
+# ── hCaptcha (Bot Protection — Fallback) ───────
+NEXT_PUBLIC_HCAPTCHA_SITE_KEY=your-hcaptcha-site-key
+HCAPTCHA_SECRET_KEY=your-hcaptcha-secret-key
 
 # ── Email (Nodemailer — for password reset OTP) ─
 SMTP_HOST=smtp.gmail.com
@@ -209,6 +213,8 @@ SMTP_FROM=noreply@yourdomain.com
 | `UPSTASH_REDIS_REST_TOKEN` | No | Upstash Redis auth token |
 | `NEXT_PUBLIC_TURNSTILE_SITE_KEY` | No | Cloudflare Turnstile site key (public) |
 | `TURNSTILE_SECRET_KEY` | No | Cloudflare Turnstile secret key (server-only) |
+| `NEXT_PUBLIC_HCAPTCHA_SITE_KEY` | No | hCaptcha site key — fallback (public) |
+| `HCAPTCHA_SECRET_KEY` | No | hCaptcha secret key — fallback (server-only) |
 | `SMTP_HOST` | No | SMTP server for password reset emails |
 | `SMTP_PORT` | No | SMTP port (587 for TLS) |
 | `SMTP_USER` | No | SMTP username |

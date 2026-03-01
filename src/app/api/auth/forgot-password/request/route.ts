@@ -3,7 +3,7 @@ import crypto from 'crypto'
 import { checkRateLimit, getClientIp, rateLimitResponse } from '@/lib/rate-limit'
 import { getTransporter, getSender } from '@/lib/email'
 import { createServiceClient } from '@/lib/supabase/service'
-import { verifyTurnstileToken } from '@/lib/turnstile'
+import { verifyTurnstileToken, verifyCaptchaToken, type CaptchaType } from '@/lib/turnstile'
 
 // Fully responsive institutional email — works on Gmail, Outlook, Apple Mail, and mobile
 function buildOtpEmail(name: string, registerId: string, otp: string): string {
@@ -177,17 +177,18 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json()
-    const { turnstileToken } = body
+    const { turnstileToken, captchaType } = body
+    const resolvedCaptchaType: CaptchaType = captchaType === 'hcaptcha' ? 'hcaptcha' : 'turnstile'
 
-    // Verify Cloudflare Turnstile bot protection.
+    // Verify CAPTCHA bot protection (Turnstile primary, hCaptcha fallback).
     // If widget failed to load (ad-blocker / network), apply stricter
     // rate limit instead of blocking entirely.
     if (!turnstileToken) {
       const strictRl = await checkRateLimit(`otp-no-captcha:${ip}`, 2, 15 * 60 * 1000)
       if (!strictRl.allowed) return rateLimitResponse(strictRl.resetAt)
     } else {
-      const turnstileValid = await verifyTurnstileToken(turnstileToken, ip)
-      if (!turnstileValid) {
+      const captchaValid = await verifyCaptchaToken(turnstileToken, resolvedCaptchaType, ip)
+      if (!captchaValid) {
         return NextResponse.json(
           { error: 'Bot verification failed. Please refresh and try again.' },
           { status: 403 }

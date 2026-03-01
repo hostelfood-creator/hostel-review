@@ -1,19 +1,28 @@
 /**
- * Server-side Cloudflare Turnstile token verification.
- * Called from auth API routes to validate the bot challenge token
- * sent by the client-side Turnstile widget.
+ * Server-side CAPTCHA token verification.
+ *
+ * Supports TWO providers:
+ * 1. Cloudflare Turnstile (primary) — invisible/managed bot protection
+ * 2. hCaptcha (fallback) — visible checkbox challenge
+ *
+ * The client sends `captchaType: 'turnstile' | 'hcaptcha'` alongside
+ * the token so the server knows which provider to verify against.
  *
  * @see https://developers.cloudflare.com/turnstile/get-started/server-side-validation/
+ * @see https://docs.hcaptcha.com/#verify-the-user-response-server-side
  */
 
 const TURNSTILE_VERIFY_URL = 'https://challenges.cloudflare.com/turnstile/v0/siteverify'
+const HCAPTCHA_VERIFY_URL = 'https://api.hcaptcha.com/siteverify'
 
-interface TurnstileVerifyResult {
+interface CaptchaVerifyResult {
   success: boolean
   'error-codes'?: string[]
   challenge_ts?: string
   hostname?: string
 }
+
+export type CaptchaType = 'turnstile' | 'hcaptcha'
 
 /**
  * Verify a Turnstile token server-side.
@@ -26,16 +35,36 @@ export async function verifyTurnstileToken(
   token: string | undefined | null,
   remoteIp?: string
 ): Promise<boolean> {
-  const secret = process.env.TURNSTILE_SECRET_KEY
+  return verifyCaptchaToken(token, 'turnstile', remoteIp)
+}
+
+/**
+ * Unified captcha verification — verifies tokens from either provider.
+ *
+ * @param token   The challenge response token from the client widget
+ * @param type    Which captcha provider issued the token
+ * @param remoteIp  Optional client IP for additional verification
+ */
+export async function verifyCaptchaToken(
+  token: string | undefined | null,
+  type: CaptchaType = 'turnstile',
+  remoteIp?: string
+): Promise<boolean> {
+  const isHcaptcha = type === 'hcaptcha'
+  const secret = isHcaptcha
+    ? process.env.HCAPTCHA_SECRET_KEY
+    : process.env.TURNSTILE_SECRET_KEY
+  const verifyUrl = isHcaptcha ? HCAPTCHA_VERIFY_URL : TURNSTILE_VERIFY_URL
+  const label = isHcaptcha ? 'hCaptcha' : 'Turnstile'
 
   // Skip verification in development if no secret key is configured
   if (!secret) {
     if (process.env.NODE_ENV === 'development') {
-      console.warn('[Turnstile] No TURNSTILE_SECRET_KEY — skipping verification in dev mode')
+      console.warn(`[${label}] No secret key — skipping verification in dev mode`)
       return true
     }
     // In production, missing secret key = deny all (fail closed)
-    console.error('[Turnstile] TURNSTILE_SECRET_KEY is not set — denying request')
+    console.error(`[${label}] Secret key is not set — denying request`)
     return false
   }
 
@@ -51,27 +80,31 @@ export async function verifyTurnstileToken(
     if (remoteIp) {
       formData.append('remoteip', remoteIp)
     }
+    // hCaptcha requires sitekey in the verification request
+    if (isHcaptcha && process.env.NEXT_PUBLIC_HCAPTCHA_SITE_KEY) {
+      formData.append('sitekey', process.env.NEXT_PUBLIC_HCAPTCHA_SITE_KEY)
+    }
 
-    const res = await fetch(TURNSTILE_VERIFY_URL, {
+    const res = await fetch(verifyUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: formData.toString(),
     })
 
     if (!res.ok) {
-      console.error('[Turnstile] Verification API returned', res.status)
+      console.error(`[${label}] Verification API returned`, res.status)
       return false
     }
 
-    const result: TurnstileVerifyResult = await res.json()
+    const result: CaptchaVerifyResult = await res.json()
 
     if (!result.success) {
-      console.warn('[Turnstile] Verification failed:', result['error-codes'])
+      console.warn(`[${label}] Verification failed:`, result['error-codes'])
     }
 
     return result.success
   } catch (err) {
-    console.error('[Turnstile] Verification error:', err)
+    console.error(`[${label}] Verification error:`, err)
     // Fail open only in development — fail closed in production
     return process.env.NODE_ENV === 'development'
   }

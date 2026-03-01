@@ -19,6 +19,7 @@ import ParticlesBackground from '@/components/particles-background'
 import { motion } from 'framer-motion'
 import { UserGuide } from '@/components/user-guide'
 import { Turnstile, type TurnstileRef } from '@/components/turnstile'
+import { HCaptcha, type HCaptchaRef } from '@/components/hcaptcha'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -38,7 +39,9 @@ export default function LoginPage() {
   const [lookingUpName, setLookingUpName] = useState(false)
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null)
   const [turnstileFailed, setTurnstileFailed] = useState(false)
+  const [captchaType, setCaptchaType] = useState<'turnstile' | 'hcaptcha'>('turnstile')
   const turnstileRef = useRef<TurnstileRef>(null)
+  const hcaptchaRef = useRef<HCaptchaRef>(null)
   const lookupTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const [form, setForm] = useState({
@@ -189,7 +192,7 @@ export default function LoginPage() {
       const res = await fetch('/api/auth/forgot-password/request', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: emailVal, turnstileToken })
+        body: JSON.stringify({ email: emailVal, turnstileToken, captchaType })
       })
       const data = await res.json()
       if (res.status === 404) {
@@ -205,9 +208,13 @@ export default function LoginPage() {
       toast.error(err.message)
     } finally {
       setLoading(false)
-      // Reset Turnstile widget — tokens are single-use
+      // Reset captcha widget — tokens are single-use
       setTurnstileToken(null)
-      turnstileRef.current?.reset()
+      if (captchaType === 'hcaptcha') {
+        hcaptchaRef.current?.reset()
+      } else {
+        turnstileRef.current?.reset()
+      }
     }
   }
 
@@ -267,8 +274,8 @@ export default function LoginPage() {
     try {
       const endpoint = isRegister ? '/api/auth/register' : '/api/auth/login'
       const body = isRegister
-        ? { ...form, turnstileToken }
-        : { registerId: form.registerId, password: form.password, rememberMe, turnstileToken }
+        ? { ...form, turnstileToken, captchaType }
+        : { registerId: form.registerId, password: form.password, rememberMe, turnstileToken, captchaType }
 
       const res = await fetch(endpoint, {
         method: 'POST',
@@ -304,9 +311,13 @@ export default function LoginPage() {
       toast.error('Network error. Please check your connection.')
     } finally {
       setLoading(false)
-      // Reset Turnstile widget — tokens are single-use
+      // Reset captcha widget — tokens are single-use
       setTurnstileToken(null)
-      turnstileRef.current?.reset()
+      if (captchaType === 'hcaptcha') {
+        hcaptchaRef.current?.reset()
+      } else {
+        turnstileRef.current?.reset()
+      }
     }
   }
 
@@ -345,11 +356,12 @@ export default function LoginPage() {
       {/* Parallax floating particles */}
       <ParticlesBackground />
 
-      {/* Cloudflare Turnstile — bot protection with graceful degradation */}
+      {/* Cloudflare Turnstile — primary bot protection */}
       <Turnstile
         ref={turnstileRef}
         onVerify={(token) => {
           console.log('[Turnstile] Token set')
+          setCaptchaType('turnstile')
           setTurnstileToken(token)
           setTurnstileFailed(false)
         }}
@@ -359,8 +371,9 @@ export default function LoginPage() {
           setTurnstileToken(null)
         }}
         onFatalError={() => {
-          console.error('[Turnstile] All retries exhausted — enabling bypass')
+          console.error('[Turnstile] All retries exhausted — switching to hCaptcha fallback')
           setTurnstileFailed(true)
+          setCaptchaType('hcaptcha')
         }}
       />
 
@@ -728,6 +741,26 @@ export default function LoginPage() {
                       >
                         Remember me
                       </Label>
+                    </div>
+                  )}
+
+                  {/* hCaptcha fallback — shown when Turnstile fails */}
+                  {turnstileFailed && (
+                    <div className="mt-2 flex flex-col items-center gap-1">
+                      <p className="text-xs text-muted-foreground">Please verify you&apos;re human</p>
+                      <HCaptcha
+                        ref={hcaptchaRef}
+                        onVerify={(token) => {
+                          console.log('[hCaptcha] Token set')
+                          setCaptchaType('hcaptcha')
+                          setTurnstileToken(token)
+                        }}
+                        onExpire={() => setTurnstileToken(null)}
+                        onError={(code) => {
+                          console.error('[hCaptcha] Error:', code)
+                          setTurnstileToken(null)
+                        }}
+                      />
                     </div>
                   )}
 

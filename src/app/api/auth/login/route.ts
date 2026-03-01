@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { checkRateLimit, getClientIp, rateLimitResponse } from '@/lib/rate-limit'
 import { createServiceClient } from '@/lib/supabase/service'
 import { createAuthClient, attachCookies } from '@/lib/supabase/auth-cookies'
-import { verifyTurnstileToken } from '@/lib/turnstile'
+import { verifyTurnstileToken, verifyCaptchaToken, type CaptchaType } from '@/lib/turnstile'
 
 export async function POST(request: Request) {
   // Rate limit: 10 attempts per 15 minutes per IP (Redis-backed in production)
@@ -12,8 +12,9 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json()
-    const { registerId, password, rememberMe, turnstileToken } = body
+    const { registerId, password, rememberMe, turnstileToken, captchaType } = body
     const extendSession = rememberMe === true
+    const resolvedCaptchaType: CaptchaType = captchaType === 'hcaptcha' ? 'hcaptcha' : 'turnstile'
 
     if (!registerId || !password) {
       return NextResponse.json(
@@ -39,7 +40,7 @@ export async function POST(request: Request) {
     }
 
     const [turnstileValid, profileResult] = await Promise.all([
-      turnstileToken ? verifyTurnstileToken(turnstileToken, ip) : Promise.resolve(true),
+      turnstileToken ? verifyCaptchaToken(turnstileToken, resolvedCaptchaType, ip) : Promise.resolve(true),
       adminClient
         .from('profiles')
         .select('id, email')

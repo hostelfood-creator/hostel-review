@@ -4,7 +4,7 @@ import { lookupStudent } from '@/lib/student-lookup'
 import { sendWelcomeEmail } from '@/lib/email'
 import { createServiceClient } from '@/lib/supabase/service'
 import { createAuthClient, attachCookies } from '@/lib/supabase/auth-cookies'
-import { verifyTurnstileToken } from '@/lib/turnstile'
+import { verifyTurnstileToken, verifyCaptchaToken, type CaptchaType } from '@/lib/turnstile'
 
 // ── Input validation helpers ──────────────────────────────
 function validateRegistrationInput(body: Record<string, unknown>) {
@@ -53,17 +53,18 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: validation.error }, { status: validation.status })
     }
     const { cleanId, cleanName, cleanEmail, cleanPass } = validation
-    const { hostelBlock, department, year, turnstileToken } = body
+    const { hostelBlock, department, year, turnstileToken, captchaType } = body
+    const resolvedCaptchaType: CaptchaType = captchaType === 'hcaptcha' ? 'hcaptcha' : 'turnstile'
 
-    // Verify Cloudflare Turnstile bot protection.
+    // Verify CAPTCHA bot protection (Turnstile primary, hCaptcha fallback).
     // If widget failed to load (ad-blocker / network), apply stricter rate limit
     // instead of blocking entirely — prevents permanent lockout.
     if (!turnstileToken) {
       const strictRl = await checkRateLimit(`register-no-captcha:${ip}`, 2, 60 * 60 * 1000)
       if (!strictRl.allowed) return rateLimitResponse(strictRl.resetAt)
     } else {
-      const turnstileValid = await verifyTurnstileToken(turnstileToken, ip)
-      if (!turnstileValid) {
+      const captchaValid = await verifyCaptchaToken(turnstileToken, resolvedCaptchaType, ip)
+      if (!captchaValid) {
         return NextResponse.json(
           { error: 'Bot verification failed. Please refresh and try again.' },
           { status: 403 }

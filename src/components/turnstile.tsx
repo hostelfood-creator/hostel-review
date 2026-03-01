@@ -3,17 +3,22 @@
 import { useEffect, useRef, useCallback, useImperativeHandle, forwardRef } from 'react'
 
 /**
- * Cloudflare Turnstile invisible widget component.
- * Loads the Turnstile script and renders an invisible challenge.
- * Calls `onVerify` with the token when verification succeeds.
+ * Cloudflare Turnstile bot-protection widget component.
  *
- * Exposes a `reset()` method via ref so the parent can request a fresh
- * token after each form submission (Turnstile tokens are single-use).
+ * Renders a managed/compact widget in a visually hidden (off-screen)
+ * container and automatically retries on errors (up to MAX_RETRIES).
+ * Exposes retry count via `onFatalError` so the parent can show a
+ * bypass fallback if Turnstile is persistently broken (ad-blocker,
+ * network, wrong key type, etc.).
+ *
+ * Uses `size: 'compact'` which works with Managed, Non-interactive,
+ * AND Invisible key types. `size: 'invisible'` ONLY works when the
+ * key was explicitly created as Invisible type in the CF dashboard.
  *
  * @see https://developers.cloudflare.com/turnstile/get-started/client-side-rendering/
  */
 
-// Extend the global Window interface for Turnstile
+// ── Global Turnstile type ────────────────────────────────────────────
 declare global {
   interface Window {
     turnstile?: {
@@ -25,6 +30,7 @@ declare global {
   }
 }
 
+// ── Public types ─────────────────────────────────────────────────────
 export interface TurnstileRef {
   reset: () => void
 }
@@ -33,9 +39,11 @@ interface TurnstileProps {
   onVerify: (token: string) => void
   onExpire?: () => void
   onError?: (errorCode?: string) => void
+  /** Called when the widget has exhausted all retry attempts */
+  onFatalError?: () => void
 }
 
-// Track script loading globally to avoid duplicate script tags
+// ── Script loader (singleton) ────────────────────────────────────────
 let scriptLoaded = false
 let scriptLoading = false
 const loadCallbacks: (() => void)[] = []
@@ -60,47 +68,90 @@ function loadTurnstileScript(): Promise<void> {
     }
 
     const script = document.createElement('script')
-    script.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?onload=onTurnstileLoad'
+    script.src =
+      'https://challenges.cloudflare.com/turnstile/v0/api.js?onload=onTurnstileLoad'
     script.async = true
     script.defer = true
+
+    // Handle script load failure (network / ad-blocker)
+    script.onerror = () => {
+      scriptLoading = false
+      console.error('[Turnstile] Failed to load script — network or ad blocker?')
+      loadCallbacks.forEach((cb) => cb())
+      loadCallbacks.length = 0
+    }
+
     document.head.appendChild(script)
   })
 }
 
+// ── Constants ────────────────────────────────────────────────────────
+const MAX_RETRIES = 3
+const RETRY_BASE_DELAY_MS = 2000
+
+// ── Component ────────────────────────────────────────────────────────
 export const Turnstile = forwardRef<TurnstileRef, TurnstileProps>(
-  function Turnstile({ onVerify, onExpire, onError }, ref) {
+  function Turnstile({ onVerify, onExpire, onError, onFatalError }, ref) {
     const containerRef = useRef<HTMLDivElement>(null)
     const widgetIdRef = useRef<string | null>(null)
+    const retryCountRef = useRef(0)
+    const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+    const mountedRef = useRef(true)
+
+    // Keep callback refs in sync without re-rendering the widget
     const onVerifyRef = useRef(onVerify)
     const onExpireRef = useRef(onExpire)
     const onErrorRef = useRef(onError)
-
-    // Keep refs in sync without re-rendering the widget
+    const onFatalErrorRef = useRef(onFatalError)
     onVerifyRef.current = onVerify
     onExpireRef.current = onExpire
     onErrorRef.current = onError
+    onFatalErrorRef.current = onFatalError
 
     const siteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY
 
-    // Expose reset() to parent so single-use tokens can be refreshed
-    useImperativeHandle(ref, () => ({
-      reset: () => {
-        if (widgetIdRef.current && window.turnstile) {
-          try {
-            window.turnstile.reset(widgetIdRef.current)
-          } catch { /* widget may have been removed */ }
-        }
-      },
-    }), [])
+    // Expose reset() to parent (single-use tokens need a fresh challenge)
+    useImperativeHandle(
+      ref,
+      () => ({
+        reset: () => {
+          if (widgetIdRef.current && window.turnstile) {
+            try {
+              window.turnstile.reset(widgetIdRef.current)
+            } catch { /* widget may have been removed */ }
+          }
+        },
+      }),
+      []
+    )
 
+    // ── Render / re-render the widget ────────────────────────────────
     const renderWidget = useCallback(async () => {
-      if (!siteKey || !containerRef.current) return
+      if (!siteKey || !containerRef.current || !mountedRef.current) return
 
       await loadTurnstileScript()
 
-      if (!window.turnstile || !containerRef.current) return
+      // Script failed to load (e.g. ad blocker)
+      if (!window.turnstile) {
+        console.error('[Turnstile] Script not available after loading attempt')
+        retryCountRef.current += 1
 
-      // Clean up previous widget if exists
+        if (retryCountRef.current >= MAX_RETRIES) {
+          onFatalErrorRef.current?.()
+          return
+        }
+
+        // Retry after increasing delay
+        const delay = RETRY_BASE_DELAY_MS * retryCountRef.current
+        retryTimerRef.current = setTimeout(() => {
+          if (mountedRef.current) renderWidget()
+        }, delay)
+        return
+      }
+
+      if (!containerRef.current || !mountedRef.current) return
+
+      // Clean up previous widget
       if (widgetIdRef.current) {
         try {
           window.turnstile.remove(widgetIdRef.current)
@@ -108,31 +159,63 @@ export const Turnstile = forwardRef<TurnstileRef, TurnstileProps>(
         widgetIdRef.current = null
       }
 
-      widgetIdRef.current = window.turnstile.render(containerRef.current, {
-        sitekey: siteKey,
-        callback: (token: string) => {
-          console.log('[Turnstile] Token received successfully')
-          onVerifyRef.current(token)
-        },
-        'expired-callback': () => {
-          console.warn('[Turnstile] Token expired — requesting fresh token')
-          onExpireRef.current?.()
-        },
-        'error-callback': (errorCode: string) => {
-          console.error('[Turnstile] Widget error:', errorCode)
-          onErrorRef.current?.(errorCode)
-        },
-        size: 'invisible',
-        execution: 'render',
-        retry: 'auto',
-        'retry-interval': 3000,
-      })
+      try {
+        widgetIdRef.current = window.turnstile.render(containerRef.current, {
+          sitekey: siteKey,
+          callback: (token: string) => {
+            console.log('[Turnstile] Token received successfully')
+            retryCountRef.current = 0
+            onVerifyRef.current(token)
+          },
+          'expired-callback': () => {
+            console.warn('[Turnstile] Token expired — auto-resetting')
+            onExpireRef.current?.()
+            // Auto-reset on expiry to get a new token
+            if (widgetIdRef.current && window.turnstile) {
+              try { window.turnstile.reset(widgetIdRef.current) } catch { /* ignore */ }
+            }
+          },
+          'error-callback': (errorCode: string) => {
+            console.error('[Turnstile] Widget error:', errorCode)
+            onErrorRef.current?.(errorCode)
+
+            retryCountRef.current += 1
+            if (retryCountRef.current >= MAX_RETRIES) {
+              console.error('[Turnstile] Max retries exhausted')
+              onFatalErrorRef.current?.()
+              return
+            }
+
+            // Auto-retry after increasing delay
+            const delay = RETRY_BASE_DELAY_MS * retryCountRef.current
+            console.log(`[Turnstile] Retrying in ${delay}ms (attempt ${retryCountRef.current}/${MAX_RETRIES})`)
+            retryTimerRef.current = setTimeout(() => {
+              if (mountedRef.current) renderWidget()
+            }, delay)
+          },
+          // 'compact' (≥130×120px) works with ALL key types:
+          // Managed, Non-interactive, and Invisible.
+          size: 'compact',
+          execution: 'render',
+          retry: 'auto',
+          'retry-interval': 3000,
+        })
+      } catch (err) {
+        console.error('[Turnstile] render() threw:', err)
+        retryCountRef.current += 1
+        if (retryCountRef.current >= MAX_RETRIES) {
+          onFatalErrorRef.current?.()
+        }
+      }
     }, [siteKey])
 
     useEffect(() => {
+      mountedRef.current = true
       renderWidget()
 
       return () => {
+        mountedRef.current = false
+        if (retryTimerRef.current) clearTimeout(retryTimerRef.current)
         if (widgetIdRef.current && window.turnstile) {
           try {
             window.turnstile.remove(widgetIdRef.current)
@@ -142,24 +225,24 @@ export const Turnstile = forwardRef<TurnstileRef, TurnstileProps>(
       }
     }, [renderWidget])
 
-    // Don't render anything visible — the widget is invisible
     if (!siteKey) return null
 
-    // Cloudflare Turnstile invisible mode — the container must exist in the DOM
-    // but does not need visible dimensions. Keep it accessible but out of view.
+    // Container: 150×140px (exceeds compact minimum of 130×120px).
+    // Positioned off-screen (bottom: -200, right: -200) so it renders
+    // with real dimensions but is not visible to the user.
     return (
       <div
         ref={containerRef}
+        aria-hidden="true"
         style={{
           position: 'fixed',
-          bottom: 0,
-          right: 0,
+          bottom: -200,
+          right: -200,
           zIndex: 1,
-          opacity: 0.01,
-          pointerEvents: 'none',
-          width: 1,
-          height: 1,
+          width: 150,
+          height: 140,
           overflow: 'hidden',
+          pointerEvents: 'none',
         }}
       />
     )

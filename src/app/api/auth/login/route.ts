@@ -30,8 +30,16 @@ export async function POST(request: Request) {
     // Turnstile verification and profile lookup are independent —
     // run them concurrently to reduce login latency.
     const adminClient = createServiceClient()
+    // If the client didn't send a Turnstile token (widget failed to load),
+    // apply a much stricter rate limit instead of blocking entirely.
+    // This prevents permanent lockout from ad-blockers / network issues.
+    if (!turnstileToken) {
+      const strictRl = await checkRateLimit(`login-no-captcha:${ip}`, 3, 15 * 60 * 1000)
+      if (!strictRl.allowed) return rateLimitResponse(strictRl.resetAt)
+    }
+
     const [turnstileValid, profileResult] = await Promise.all([
-      verifyTurnstileToken(turnstileToken, ip),
+      turnstileToken ? verifyTurnstileToken(turnstileToken, ip) : Promise.resolve(true),
       adminClient
         .from('profiles')
         .select('id, email')

@@ -37,6 +37,7 @@ export default function LoginPage() {
   const [emailLocked, setEmailLocked] = useState(false)
   const [lookingUpName, setLookingUpName] = useState(false)
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null)
+  const [turnstileFailed, setTurnstileFailed] = useState(false)
   const turnstileRef = useRef<TurnstileRef>(null)
   const lookupTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -178,7 +179,7 @@ export default function LoginPage() {
       setFieldErrors({ forgotEmail: 'Enter your @kanchiuniv.ac.in college email' })
       return
     }
-    if (!turnstileToken) {
+    if (!turnstileToken && !turnstileFailed) {
       toast.error('Bot verification loading — please wait a moment and try again.')
       return
     }
@@ -256,7 +257,7 @@ export default function LoginPage() {
 
     if (!validate()) return
 
-    if (!turnstileToken) {
+    if (!turnstileToken && !turnstileFailed) {
       toast.error('Bot verification loading — please wait a moment and try again.')
       return
     }
@@ -344,17 +345,22 @@ export default function LoginPage() {
       {/* Parallax floating particles */}
       <ParticlesBackground />
 
-      {/* Cloudflare Turnstile — invisible bot protection */}
+      {/* Cloudflare Turnstile — bot protection with graceful degradation */}
       <Turnstile
         ref={turnstileRef}
         onVerify={(token) => {
           console.log('[Turnstile] Token set')
           setTurnstileToken(token)
+          setTurnstileFailed(false)
         }}
         onExpire={() => setTurnstileToken(null)}
         onError={(code) => {
           console.error('[Turnstile] Error:', code)
           setTurnstileToken(null)
+        }}
+        onFatalError={() => {
+          console.error('[Turnstile] All retries exhausted — enabling bypass')
+          setTurnstileFailed(true)
         }}
       />
 

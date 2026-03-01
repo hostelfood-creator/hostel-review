@@ -55,13 +55,20 @@ export async function POST(request: Request) {
     const { cleanId, cleanName, cleanEmail, cleanPass } = validation
     const { hostelBlock, department, year, turnstileToken } = body
 
-    // Verify Cloudflare Turnstile bot protection
-    const turnstileValid = await verifyTurnstileToken(turnstileToken, ip)
-    if (!turnstileValid) {
-      return NextResponse.json(
-        { error: 'Bot verification failed. Please refresh and try again.' },
-        { status: 403 }
-      )
+    // Verify Cloudflare Turnstile bot protection.
+    // If widget failed to load (ad-blocker / network), apply stricter rate limit
+    // instead of blocking entirely — prevents permanent lockout.
+    if (!turnstileToken) {
+      const strictRl = await checkRateLimit(`register-no-captcha:${ip}`, 2, 60 * 60 * 1000)
+      if (!strictRl.allowed) return rateLimitResponse(strictRl.resetAt)
+    } else {
+      const turnstileValid = await verifyTurnstileToken(turnstileToken, ip)
+      if (!turnstileValid) {
+        return NextResponse.json(
+          { error: 'Bot verification failed. Please refresh and try again.' },
+          { status: 403 }
+        )
+      }
     }
 
     // Server-side verification — if the register ID is in university records,

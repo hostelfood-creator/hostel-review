@@ -179,13 +179,20 @@ export async function POST(request: Request) {
     const body = await request.json()
     const { turnstileToken } = body
 
-    // Verify Cloudflare Turnstile bot protection
-    const turnstileValid = await verifyTurnstileToken(turnstileToken, ip)
-    if (!turnstileValid) {
-      return NextResponse.json(
-        { error: 'Bot verification failed. Please refresh and try again.' },
-        { status: 403 }
-      )
+    // Verify Cloudflare Turnstile bot protection.
+    // If widget failed to load (ad-blocker / network), apply stricter
+    // rate limit instead of blocking entirely.
+    if (!turnstileToken) {
+      const strictRl = await checkRateLimit(`otp-no-captcha:${ip}`, 2, 15 * 60 * 1000)
+      if (!strictRl.allowed) return rateLimitResponse(strictRl.resetAt)
+    } else {
+      const turnstileValid = await verifyTurnstileToken(turnstileToken, ip)
+      if (!turnstileValid) {
+        return NextResponse.json(
+          { error: 'Bot verification failed. Please refresh and try again.' },
+          { status: 403 }
+        )
+      }
     }
 
     const rawId = body.email || body.registerId

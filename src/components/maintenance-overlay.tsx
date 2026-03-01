@@ -25,11 +25,12 @@ export default function MaintenanceOverlay() {
                 isSuperAdminRef.current = role === 'super_admin' || role === 'admin'
 
                 // Fetch initial maintenance status from the DB
+                // Use maybeSingle() to avoid 406 when RLS blocks the query
                 const { data } = await supabase
                     .from('site_settings')
                     .select('maintenance_mode')
                     .eq('id', 1)
-                    .single()
+                    .maybeSingle()
 
                 if (data?.maintenance_mode && !isSuperAdminRef.current) {
                     setIsMaintenance(true)

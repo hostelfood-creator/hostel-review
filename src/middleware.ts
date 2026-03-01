@@ -28,18 +28,18 @@ export async function middleware(request: NextRequest) {
   // We do NOT use 'strict-dynamic' because Next.js injects framework scripts without nonces.
   const isProd = process.env.NODE_ENV === 'production'
   const scriptSrc = isProd
-    ? `script-src 'self' 'nonce-${nonce}' 'unsafe-inline' https://challenges.cloudflare.com`
-    : `script-src 'self' 'unsafe-inline' 'unsafe-eval' https://challenges.cloudflare.com`
+    ? `script-src 'self' 'nonce-${nonce}' 'unsafe-inline' https://challenges.cloudflare.com https://js.hcaptcha.com`
+    : `script-src 'self' 'unsafe-inline' 'unsafe-eval' https://challenges.cloudflare.com https://js.hcaptcha.com`
 
   const cspDirectives = [
     "default-src 'self'",
     scriptSrc,
-    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-    "style-src-elem 'self' 'unsafe-inline' https://fonts.googleapis.com",
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://newassets.hcaptcha.com",
+    "style-src-elem 'self' 'unsafe-inline' https://fonts.googleapis.com https://newassets.hcaptcha.com",
     "font-src 'self' data: https://fonts.gstatic.com",
-    "img-src 'self' blob: data: https://freeimage.host https://iili.io https://api.qrserver.com",
-    "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://challenges.cloudflare.com",
-    "frame-src https://challenges.cloudflare.com",
+    "img-src 'self' blob: data: https://freeimage.host https://iili.io https://api.qrserver.com https://imgs.hcaptcha.com",
+    "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://challenges.cloudflare.com https://*.hcaptcha.com",
+    "frame-src https://challenges.cloudflare.com https://*.hcaptcha.com",
     "frame-ancestors 'none'",
     "base-uri 'self'",
     "form-action 'self'",

@@ -31,6 +31,16 @@ export async function GET(request: Request) {
     const monthShort = new Intl.DateTimeFormat('en-US', { timeZone: TZ, month: 'short' }).format(now)
     const year = parseInt(parts.year!, 10)
 
+    // Extract hours and minutes in IST for client-side meal window checks
+    const timeParts = new Intl.DateTimeFormat('en-US', {
+        timeZone: TZ,
+        hour: 'numeric',
+        minute: 'numeric',
+        hour12: false,
+    }).formatToParts(now)
+    const hours = parseInt(timeParts.find(p => p.type === 'hour')?.value ?? '0', 10)
+    const minutes = parseInt(timeParts.find(p => p.type === 'minute')?.value ?? '0', 10)
+
     return NextResponse.json({
         date: dateStr,
         display: `${weekday}, ${day} ${monthShort} ${year}`,
@@ -38,6 +48,8 @@ export async function GET(request: Request) {
         day,
         month: monthShort,
         year,
+        hours,
+        minutes,
         timestamp: now.getTime(),
     })
 }

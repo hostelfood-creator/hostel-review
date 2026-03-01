@@ -122,7 +122,7 @@ export const Turnstile = forwardRef<TurnstileRef, TurnstileProps>(
           console.error('[Turnstile] Widget error:', errorCode)
           onErrorRef.current?.(errorCode)
         },
-        size: 'compact',
+        size: 'invisible',
         execution: 'render',
         retry: 'auto',
         'retry-interval': 3000,
@@ -145,8 +145,8 @@ export const Turnstile = forwardRef<TurnstileRef, TurnstileProps>(
     // Don't render anything visible — the widget is invisible
     if (!siteKey) return null
 
-    // Cloudflare Turnstile needs the container in the DOM with real
-    // dimensions — zero-size or display:none prevents the iframe from loading.
+    // Cloudflare Turnstile invisible mode — the container must exist in the DOM
+    // but does not need visible dimensions. Keep it accessible but out of view.
     return (
       <div
         ref={containerRef}
@@ -154,11 +154,12 @@ export const Turnstile = forwardRef<TurnstileRef, TurnstileProps>(
           position: 'fixed',
           bottom: 0,
           right: 0,
-          zIndex: -1,
+          zIndex: 1,
           opacity: 0.01,
           pointerEvents: 'none',
-          width: 70,
-          height: 65,
+          width: 1,
+          height: 1,
+          overflow: 'hidden',
         }}
       />
     )

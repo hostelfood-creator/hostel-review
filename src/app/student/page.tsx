@@ -207,7 +207,16 @@ export default function StudentDashboard() {
       const data = await res.json()
       setTodayDate(data.date)
       setDisplayDate(data.display)
-      setServerHour(data.hours)
+      // Use hours from API; fallback: derive from timestamp in IST
+      if (typeof data.hours === 'number') {
+        setServerHour(data.hours)
+      } else if (data.timestamp) {
+        const istHour = parseInt(
+          new Date(data.timestamp).toLocaleString('en-US', { timeZone: 'Asia/Kolkata', hour: 'numeric', hour12: false }),
+          10
+        )
+        setServerHour(isNaN(istHour) ? new Date().getHours() : istHour)
+      }
     } catch {
       // Fallback to client time
       const now = new Date()

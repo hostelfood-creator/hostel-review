@@ -9,7 +9,7 @@
  *
  * Safe to re-run — uses ON CONFLICT (register_id) DO UPDATE.
  */
-import * as XLSX from 'xlsx'
+import ExcelJS from 'exceljs'
 import path from 'path'
 import fs from 'fs'
 import { createClient } from '@supabase/supabase-js'
@@ -71,21 +71,30 @@ async function main() {
   }
 
   console.log(`Reading XLSX from: ${filePath}`)
-  const buffer = fs.readFileSync(filePath)
-  const workbook = XLSX.read(buffer, { type: 'buffer' })
+  const workbook = new ExcelJS.Workbook()
+  await workbook.xlsx.readFile(filePath)
   // Use Map to deduplicate by register_id (first occurrence wins — same as original student-lookup.ts)
   const recordMap = new Map<string, StudentRow>()
 
   // 3. Parse each sheet
-  for (const sheetName of workbook.SheetNames) {
+  for (const worksheet of workbook.worksheets) {
+    const sheetName = worksheet.name
     const hostelBlock = SHEET_TO_HOSTEL[sheetName.trim().toUpperCase()]
     if (!hostelBlock) {
       console.warn(`Unknown sheet "${sheetName}" — skipping`)
       continue
     }
 
-    const sheet = workbook.Sheets[sheetName]
-    const rows: unknown[][] = XLSX.utils.sheet_to_json(sheet, { header: 1 })
+    // Convert worksheet to 2D array
+    const rows: unknown[][] = []
+    worksheet.eachRow({ includeEmpty: false }, (row) => {
+      const vals: unknown[] = []
+      row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+        while (vals.length < colNumber - 1) vals.push(null)
+        vals.push(cell.value)
+      })
+      rows.push(vals)
+    })
     if (rows.length === 0) continue
 
     // Dynamic header detection

@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { faStar, faCircleCheck, faArrowRight, faLock, faLockOpen, faUserCircle, faQrcode, faCalendarCheck, faCrown, faXmark } from '@fortawesome/free-solid-svg-icons'
+import { faStar, faCircleCheck, faArrowRight, faLock, faLockOpen, faUserCircle, faUsers, faQrcode, faCalendarCheck, faCrown, faXmark } from '@fortawesome/free-solid-svg-icons'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -216,13 +216,7 @@ export default function StudentDashboard() {
     fetch('/api/reviews/community')
       .then(r => r.json())
       .then(d => {
-        if (d.ratings) {
-          const map: Record<string, { avg: number; count: number }> = {}
-          for (const r of d.ratings) {
-            map[r.mealType] = { avg: r.avg, count: r.count }
-          }
-          setCommunityRatings(map)
-        }
+        if (d.ratings) setCommunityRatings(d.ratings)
       })
       .catch(() => {})
 
@@ -349,6 +343,12 @@ export default function StudentDashboard() {
       const timData = await timRes.json()
       if (timData.timings) setMealTimings(timData.timings as Record<string, MealTimingConfig>)
     } catch { /* ignore */ }
+    // Re-fetch community ratings
+    try {
+      const crRes = await fetch('/api/reviews/community')
+      const crData = await crRes.json()
+      if (crData.ratings) setCommunityRatings(crData.ratings)
+    } catch { /* ignore */ }
     // Menu + reviews will reload via todayDate change
     toast.success('Dashboard refreshed')
   }, [fetchServerTime])
@@ -427,13 +427,7 @@ export default function StudentDashboard() {
         fetch('/api/reviews/community')
           .then(r => r.json())
           .then(d => {
-            if (d.ratings) {
-              const map: Record<string, { avg: number; count: number }> = {}
-              for (const r of d.ratings) {
-                map[r.mealType] = { avg: r.avg, count: r.count }
-              }
-              setCommunityRatings(map)
-            }
+            if (d.ratings) setCommunityRatings(d.ratings)
           })
           .catch(() => {})
       } else {
@@ -507,24 +501,7 @@ export default function StudentDashboard() {
         </BlurFade>
       )}
 
-      {/* Community Ratings */}
-      {Object.keys(communityRatings).length > 0 && (
-        <BlurFade delay={0.33} inView>
-          <div className="flex flex-wrap gap-2 mb-6">
-            {MEAL_ORDER.map((meal) => {
-              const cr = communityRatings[meal]
-              if (!cr || cr.count === 0) return null
-              return (
-                <Badge key={meal} variant="secondary" className="text-xs px-2.5 py-1 gap-1">
-                  {MEAL_LABELS_I18N[meal]}:&nbsp;
-                  <span className="font-bold text-primary">{cr.avg.toFixed(1)}★</span>
-                  <span className="text-muted-foreground">({cr.count})</span>
-                </Badge>
-              )
-            })}
-          </div>
-        </BlurFade>
-      )}
+
 
       {/* Meal Check-in Card */}
       <BlurFade delay={0.35} inView>
@@ -733,6 +710,48 @@ export default function StudentDashboard() {
                       </Badge>
                     )}
                   </div>
+
+                  {/* Community Poll — revealed only after you rate this meal */}
+                  {isSubmitted && communityRatings[mealType] && communityRatings[mealType].count > 0 && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      transition={{ duration: 0.3, ease: 'easeOut' }}
+                      className="mt-3 pt-3 border-t border-border/40"
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-[11px] font-semibold text-muted-foreground tracking-wide flex items-center gap-1.5">
+                          <FontAwesomeIcon icon={faUsers} className="w-3 h-3" />
+                          Student Poll
+                        </span>
+                        <span className="text-[10px] text-muted-foreground font-medium">
+                          {communityRatings[mealType].count} {communityRatings[mealType].count === 1 ? 'vote' : 'votes'}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2.5">
+                        <div className="flex-1 h-2 rounded-full bg-muted/80 overflow-hidden">
+                          <motion.div
+                            initial={{ width: 0 }}
+                            animate={{ width: `${(communityRatings[mealType].avg / 5) * 100}%` }}
+                            transition={{ duration: 0.6, ease: 'easeOut', delay: 0.15 }}
+                            className={`h-full rounded-full ${
+                              communityRatings[mealType].avg >= 4
+                                ? 'bg-gradient-to-r from-green-400 to-green-500'
+                                : communityRatings[mealType].avg >= 3
+                                  ? 'bg-gradient-to-r from-primary/70 to-primary'
+                                  : 'bg-gradient-to-r from-orange-400 to-red-400'
+                            }`}
+                          />
+                        </div>
+                        <span className="text-xs font-bold text-primary min-w-[36px] text-right">
+                          {communityRatings[mealType].avg.toFixed(1)}★
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-muted-foreground mt-1.5">
+                        You rated {review?.existingRating}★ · Hostel avg {communityRatings[mealType].avg.toFixed(1)}★
+                      </p>
+                    </motion.div>
+                  )}
                 </CardContent>
               </Card>
             </BlurFade>
@@ -893,7 +912,7 @@ export default function StudentDashboard() {
 
       {/* Floating QR FAB — always visible on mobile for quick check-in */}
       {checkinStatus && !checkinStatus.checkedIn && (
-        <Link href="/student/scan" className="fixed bottom-28 right-6 z-20 lg:hidden">
+        <Link href="/student/scan" className="fixed bottom-28 left-1/2 -translate-x-1/2 z-20 lg:hidden">
           <motion.div
             initial={{ scale: 0, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}

@@ -20,8 +20,7 @@ CREATE TABLE IF NOT EXISTS announcements (
 );
 
 -- Index for efficient student queries (active, non-expired)
-CREATE INDEX IF NOT EXISTS idx_announcements_active ON announcements (created_at DESC)
-  WHERE expires_at IS NULL OR expires_at > now();
+CREATE INDEX IF NOT EXISTS idx_announcements_active ON announcements (created_at DESC, expires_at);
 
 CREATE INDEX IF NOT EXISTS idx_announcements_target ON announcements (target_block);
 

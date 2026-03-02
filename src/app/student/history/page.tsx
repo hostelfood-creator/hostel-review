@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Separator } from '@/components/ui/separator'
 import { toast } from 'sonner'
+import { PullToRefresh } from '@/components/pull-to-refresh'
 
 interface Review {
   id: string
@@ -199,6 +200,7 @@ export default function HistoryPage() {
   }
 
   return (
+    <PullToRefresh onRefresh={async () => { setPage(1); await loadData(1); toast.success('History refreshed') }}>
     <div className="px-5 py-6">
       <h1 className="text-2xl font-black text-foreground tracking-tight leading-none mb-1">
         REVIEW HISTORY
@@ -365,5 +367,6 @@ export default function HistoryPage() {
         </div>
       )}
     </div>
+    </PullToRefresh>
   )
 }

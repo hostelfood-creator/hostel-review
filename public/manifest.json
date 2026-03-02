@@ -23,6 +23,29 @@
             "purpose": "any maskable"
         }
     ],
+    "shortcuts": [
+        {
+            "name": "Scan QR Check-in",
+            "short_name": "Scan QR",
+            "url": "/student/scan",
+            "description": "Scan QR code for meal check-in",
+            "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+        },
+        {
+            "name": "File a Complaint",
+            "short_name": "Complaints",
+            "url": "/student/complaints",
+            "description": "Submit a food complaint",
+            "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+        },
+        {
+            "name": "Review History",
+            "short_name": "History",
+            "url": "/student/history",
+            "description": "View your past food reviews",
+            "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+        }
+    ],
     "categories": [
         "food",
         "lifestyle",

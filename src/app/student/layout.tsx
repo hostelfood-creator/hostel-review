@@ -11,9 +11,11 @@ import { ThemeToggle } from '@/lib/theme'
 import { useTranslation } from '@/lib/i18n'
 import { LanguageSwitcher } from '@/components/language-switcher'
 import { WhatsNew } from '@/components/whats-new'
+import { AddToHomeScreen } from '@/components/add-to-homescreen'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { hapticTap } from '@/lib/haptics'
 
 interface Notification {
   id: string
@@ -152,6 +154,17 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
     )
   }
 
+  // Bottom nav: 4 regular items + center QR FAB
+  const navItemsLeft = [
+    { href: '/student', icon: <FontAwesomeIcon icon={faUtensils} className="w-5 h-5" />, label: t.nav.menu },
+    { href: '/student/history', icon: <FontAwesomeIcon icon={faClock} className="w-5 h-5" />, label: t.nav.history },
+  ]
+  const navItemsRight = [
+    { href: '/student/complaints', icon: <FontAwesomeIcon icon={faCommentDots} className="w-5 h-5" />, label: t.nav.complaints },
+    { href: '/student/profile', icon: <FontAwesomeIcon icon={faUserCircle} className="w-5 h-5" />, label: t.nav.profile },
+  ]
+
+  // Desktop sidebar still uses 5-item list
   const navItems = [
     { href: '/student', icon: <FontAwesomeIcon icon={faUtensils} className="w-5 h-5" />, label: t.nav.menu },
     { href: '/student/scan', icon: <FontAwesomeIcon icon={faQrcode} className="w-5 h-5" />, label: t.nav.checkin },
@@ -255,9 +268,12 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
                   {user.hostelBlock}
                 </Badge>
               )}
-              <LanguageSwitcher variant="compact" />
-              <WhatsNew variant="icon" />
-              <ThemeToggle />
+              {/* Language, WhatsNew, Theme — hidden on mobile, shown on desktop */}
+              <span className="hidden lg:flex items-center gap-1">
+                <LanguageSwitcher variant="compact" />
+                <WhatsNew variant="icon" />
+                <ThemeToggle />
+              </span>
               <div className="relative">
                 <Button
                   variant="ghost"
@@ -323,27 +339,66 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
           </div>
         </main>
 
-        {/* Bottom Navigation — mobile only */}
-        <nav className="fixed bottom-0 left-0 right-0 z-30 bg-background/95 backdrop-blur-lg border-t pb-6 pt-3 px-6 transition-colors lg:hidden">
-          <div className="flex justify-around items-center max-w-lg mx-auto">
-            {navItems.map((item) => {
+        {/* Add to Home Screen prompt */}
+        <AddToHomeScreen />
+
+        {/* Bottom Navigation — mobile only — center FAB QR */}
+        <nav className="fixed bottom-0 left-0 right-0 z-30 bg-background/95 backdrop-blur-lg border-t pb-safe pt-3 px-4 transition-colors lg:hidden">
+          <div className="flex items-end justify-around max-w-lg mx-auto relative">
+            {/* Left nav items */}
+            {navItemsLeft.map((item) => {
               const active = pathname === item.href
               return (
                 <Link
                   key={item.href}
                   href={item.href}
-                  className="flex flex-col items-center justify-center gap-1"
+                  onClick={() => hapticTap()}
+                  className="flex flex-col items-center justify-center gap-1 active:scale-90 transition-transform duration-100"
                 >
-                  <span
-                    className={`transition-colors ${active ? 'text-primary' : 'text-muted-foreground'
-                      }`}
-                  >
+                  <span className={`transition-colors ${active ? 'text-primary' : 'text-muted-foreground'}`}>
                     {item.icon}
                   </span>
-                  <span
-                    className={`text-[10px] font-semibold uppercase tracking-widest transition-colors ${active ? 'text-primary' : 'text-muted-foreground'
-                      }`}
-                  >
+                  <span className={`text-[10px] font-semibold uppercase tracking-widest transition-colors ${active ? 'text-primary' : 'text-muted-foreground'}`}>
+                    {item.label}
+                  </span>
+                </Link>
+              )
+            })}
+
+            {/* Center FAB — QR Scan */}
+            <Link
+              href="/student/scan"
+              onClick={() => hapticTap()}
+              className="flex flex-col items-center -mt-5 active:scale-90 transition-transform duration-100"
+            >
+              <span className={`w-14 h-14 rounded-full flex items-center justify-center shadow-lg border-4 border-background transition-colors ${
+                pathname === '/student/scan'
+                  ? 'bg-primary text-primary-foreground'
+                  : 'bg-primary text-primary-foreground'
+              }`}>
+                <FontAwesomeIcon icon={faQrcode} className="w-6 h-6" />
+              </span>
+              <span className={`text-[10px] font-semibold uppercase tracking-widest mt-1 transition-colors ${
+                pathname === '/student/scan' ? 'text-primary' : 'text-muted-foreground'
+              }`}>
+                {t.nav.checkin}
+              </span>
+            </Link>
+
+            {/* Right nav items */}
+            {navItemsRight.map((item) => {
+              const active = pathname === item.href
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  onClick={() => hapticTap()}
+                  className="flex flex-col items-center justify-center gap-1 active:scale-90 transition-transform duration-100"
+                >
+                  <span className={`transition-colors ${active ? 'text-primary' : 'text-muted-foreground'}`}>
+                    {item.icon}
+                  </span>
+                  <span className={`text-[10px] font-semibold uppercase tracking-widest transition-colors ${active ? 'text-primary' : 'text-muted-foreground'}`}>
                     {item.label}
                   </span>
                 </Link>

@@ -9,6 +9,8 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { toast } from 'sonner'
+import { PullToRefresh } from '@/components/pull-to-refresh'
+import { queueComplaint, getPendingCount, flushPendingComplaints } from '@/lib/offline-queue'
 
 interface Complaint {
     id: string
@@ -45,6 +47,7 @@ export default function StudentComplaintsPage() {
     const [loadingMore, setLoadingMore] = useState(false)
     const [page, setPage] = useState(1)
     const [hasMore, setHasMore] = useState(true)
+    const [pendingCount, setPendingCount] = useState(0)
     const PAGE_SIZE = 15
 
     const loadComplaints = useCallback(async (pageNum = 1, append = false) => {
@@ -73,6 +76,21 @@ export default function StudentComplaintsPage() {
 
     useEffect(() => {
         loadComplaints(1)
+        // Load pending offline count
+        getPendingCount().then(setPendingCount).catch(() => {})
+        // Auto-flush offline queue when back online
+        const handleOnline = async () => {
+            const flushed = await flushPendingComplaints()
+            if (flushed > 0) {
+                toast.success(`${flushed} pending complaint${flushed > 1 ? 's' : ''} submitted`)
+                setPendingCount((c) => Math.max(0, c - flushed))
+                loadComplaints(1)
+            }
+        }
+        window.addEventListener('online', handleOnline)
+        // If already online, try flushing on mount
+        if (navigator.onLine) handleOnline()
+
         const supabase = createClient()
         // Scope realtime to this user's complaints to avoid O(U) reloads on every complaint change
         let channelRef: ReturnType<typeof supabase.channel> | null = null
@@ -90,13 +108,24 @@ export default function StudentComplaintsPage() {
                 })
                 .subscribe()
         })
-        return () => { if (channelRef) supabase.removeChannel(channelRef) }
+        return () => { if (channelRef) supabase.removeChannel(channelRef); window.removeEventListener('online', handleOnline) }
     }, [loadComplaints])
 
     const handleSubmit = async () => {
         const text = complaintText.trim()
         if (!text) { toast.error('Please enter your complaint'); return }
         if (text.length > 2000) { toast.error('Complaint must be under 2000 characters'); return }
+
+        // Offline fallback — queue for later
+        if (!navigator.onLine) {
+            await queueComplaint({ complaintText: text, category })
+            const count = await getPendingCount()
+            setPendingCount(count)
+            toast.success('Saved offline — will submit when back online')
+            setComplaintText('')
+            setCategory('other')
+            return
+        }
 
         setSubmitting(true)
         try {
@@ -112,7 +141,15 @@ export default function StudentComplaintsPage() {
             setCategory('other')
             setPage(1)
             loadComplaints(1)
-        } catch { toast.error('Network error') } finally { setSubmitting(false) }
+        } catch {
+            // Network error — queue offline
+            await queueComplaint({ complaintText: text, category })
+            const count = await getPendingCount()
+            setPendingCount(count)
+            toast.success('Saved offline — will submit when back online')
+            setComplaintText('')
+            setCategory('other')
+        } finally { setSubmitting(false) }
     }
 
     const formatDate = (dateStr: string) => {
@@ -128,8 +165,17 @@ export default function StudentComplaintsPage() {
     }
 
     return (
+        <PullToRefresh onRefresh={async () => { setPage(1); await loadComplaints(1); toast.success('Complaints refreshed') }}>
         <div className="px-5 py-6">
             <h1 className="text-2xl font-black text-foreground tracking-tight leading-none mb-6">COMPLAINT BOX</h1>
+
+            {/* Pending offline complaints indicator */}
+            {pendingCount > 0 && (
+                <div className="mb-4 flex items-center gap-2 px-3 py-2 rounded-xl bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20">
+                    <Badge variant="warning" className="text-[10px]">{pendingCount} Pending</Badge>
+                    <span className="text-xs text-amber-700 dark:text-amber-400">Will auto-submit when online</span>
+                </div>
+            )}
 
             {/* Submission Card */}
             <Card className="rounded-xl mb-6">
@@ -253,5 +299,6 @@ export default function StudentComplaintsPage() {
                 </div>
             )}
         </div>
+        </PullToRefresh>
     )
 }

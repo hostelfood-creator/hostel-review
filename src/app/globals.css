@@ -94,6 +94,15 @@
     -ms-overflow-style: none;
     scrollbar-width: none;
   }
+
+  /* iOS safe area bottom padding — handles notch/home indicator */
+  .pb-safe {
+    padding-bottom: max(1.5rem, env(safe-area-inset-bottom, 1.5rem));
+  }
+
+  .pb-safe-nav {
+    padding-bottom: max(1.5rem, env(safe-area-inset-bottom, 1.5rem));
+  }
 }
 
 /* Light mode autofill */

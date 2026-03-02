@@ -11,6 +11,10 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
 import { toast } from 'sonner'
+import { ThemeToggle } from '@/lib/theme'
+import { LanguageSwitcher } from '@/components/language-switcher'
+import { WhatsNew } from '@/components/whats-new'
+import { PullToRefresh } from '@/components/pull-to-refresh'
 
 interface User {
   id: string
@@ -210,6 +214,7 @@ export default function ProfilePage() {
   ]
 
   return (
+    <PullToRefresh onRefresh={async () => { await loadData(); toast.success('Profile refreshed') }}>
     <div className="px-5 py-6">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-black text-foreground tracking-tight leading-none">
@@ -445,6 +450,28 @@ export default function ProfilePage() {
       >
         {loggingOut ? 'Signing out...' : 'Sign Out'}
       </Button>
+
+      {/* Settings — moved from header for cleaner mobile UX */}
+      <Card className="rounded-xl mt-6 lg:hidden">
+        <CardContent className="p-4">
+          <h3 className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider mb-3">Settings</h3>
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <LanguageSwitcher variant="compact" />
+              <span className="text-xs text-muted-foreground">Language</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <WhatsNew variant="icon" />
+              <span className="text-xs text-muted-foreground">Updates</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <ThemeToggle />
+              <span className="text-xs text-muted-foreground">Theme</span>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
     </div>
+    </PullToRefresh>
   )
 }

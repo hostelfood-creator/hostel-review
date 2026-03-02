@@ -8,6 +8,7 @@ import { faCheck, faUtensils, faClock, faTriangleExclamation } from '@fortawesom
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { BlurFade } from '@/components/ui/blur-fade'
+import { hapticSuccess, hapticError } from '@/lib/haptics'
 
 type CheckinState = 'loading' | 'checking-in' | 'success' | 'already' | 'no-meal' | 'error'
 
@@ -94,9 +95,11 @@ export default function CheckinPage() {
 
       setResult(data)
       setState(data.alreadyCheckedIn ? 'already' : 'success')
+      if (!data.alreadyCheckedIn) hapticSuccess()
     } catch {
       setState('error')
       setErrorMsg('Network error. Please check your connection.')
+      hapticError()
     }
   }, [router])
 

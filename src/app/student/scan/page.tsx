@@ -9,6 +9,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { BlurFade } from '@/components/ui/blur-fade'
 import QRScanner from '@/components/qr-scanner'
+import { hapticSuccess, hapticError } from '@/lib/haptics'
 
 type ScanPageState = 'intro' | 'scanning' | 'processing' | 'invalid'
 
@@ -47,14 +48,17 @@ export default function ScanPage() {
       // Validate the path is a legitimate check-in route
       if (targetPath === '/student/checkin' || targetPath.startsWith('/student/checkin?')) {
         // Valid check-in QR — navigate to the check-in page
+        hapticSuccess()
         router.push(targetPath)
       } else {
         // Not a check-in QR code
+        hapticError()
         setInvalidUrl(data)
         setPageState('invalid')
       }
     } catch {
       // Malformed URL or data
+      hapticError()
       setInvalidUrl(data)
       setPageState('invalid')
     }

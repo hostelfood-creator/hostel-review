@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { faStar, faCircleCheck, faArrowRight, faLock, faLockOpen, faUserCircle, faQrcode, faCalendarCheck, faCrown } from '@fortawesome/free-solid-svg-icons'
+import { faStar, faCircleCheck, faArrowRight, faLock, faLockOpen, faUserCircle, faQrcode, faCalendarCheck, faCrown, faXmark } from '@fortawesome/free-solid-svg-icons'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -10,11 +10,13 @@ import { Badge } from '@/components/ui/badge'
 import { BlurFade } from '@/components/ui/blur-fade'
 import { Label } from '@/components/ui/label'
 import { Slider } from '@/components/ui/slider'
+import { BottomSheet } from '@/components/ui/bottom-sheet'
 import { toast } from 'sonner'
 import { motion, AnimatePresence } from 'framer-motion'
 import Link from 'next/link'
 import { useTranslation } from '@/lib/i18n'
 import { PullToRefresh } from '@/components/pull-to-refresh'
+import { hapticSuccess, hapticLight, hapticError } from '@/lib/haptics'
 
 
 interface MenuData {
@@ -132,6 +134,8 @@ export default function StudentDashboard() {
   const [weeklyHistory, setWeeklyHistory] = useState<{ date: string; meals: string[] }[] | null>(null)
   const [weeklyPercentage, setWeeklyPercentage] = useState(0)
   const [mealTimings, setMealTimings] = useState<Record<string, MealTimingConfig> | null>(null)
+  // Bottom sheet state for review modal
+  const [activeSheet, setActiveSheet] = useState<string | null>(null)
 
   // i18n-aware meal labels
   const MEAL_LABELS_I18N: Record<string, string> = {
@@ -384,10 +388,12 @@ export default function StudentDashboard() {
             existingText: review.reviewText,
           },
         }))
+        hapticSuccess()
         // No toast - the in-card confirmation handles the feedback
       } else {
         const data = await res.json()
         toast.error(data.error || 'Failed to submit review')
+        hapticError()
         setReviews((prev) => ({
           ...prev,
           [mealType]: { ...prev[mealType], submitting: false },
@@ -395,6 +401,7 @@ export default function StudentDashboard() {
       }
     } catch {
       toast.error('Network error. Please try again.')
+      hapticError()
       setReviews((prev) => ({
         ...prev,
         [mealType]: { ...prev[mealType], submitting: false },
@@ -547,7 +554,7 @@ export default function StudentDashboard() {
         </div>
       </BlurFade>
 
-      {/* Meal Cards */}
+      {/* Meal Cards — compact, tap to open review sheet */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {MEAL_ORDER.map((mealType, index) => {
           const menu = getMenuForMeal(mealType)
@@ -561,214 +568,90 @@ export default function StudentDashboard() {
           return (
             <BlurFade key={mealType} delay={0.15 + index * 0.1} inView>
               <Card
-                className={`rounded-xl transition-all duration-300 ${isSubmitted
+                className={`rounded-xl transition-all duration-300 cursor-pointer active:scale-[0.98] ${isSubmitted
                   ? 'border-green-200 dark:border-green-500/20'
                   : !isOpen
                     ? 'opacity-80 border-muted'
                     : 'hover:border-primary/30 dark:hover:border-primary/20 hover:shadow-md'
                   }`}
+                onClick={() => {
+                  if (isOpen && !isSubmitted) {
+                    hapticLight()
+                    setActiveSheet(mealType)
+                  }
+                }}
               >
-                <CardContent className="p-5">
-                  {/* Header Row */}
-                  <div className="flex justify-between items-start mb-3">
-                    <div className="flex items-center gap-2.5">
-                      {/* Lock/Unlock Animation */}
-                      <AnimatePresence mode="wait">
-                        {isOpen ? (
-                          <motion.div
-                            key="unlocked"
-                            initial={{ scale: 0.5, opacity: 0, rotate: -45 }}
-                            animate={{ scale: 1, opacity: 1, rotate: 0 }}
-                            exit={{ scale: 0.5, opacity: 0 }}
-                            transition={{ type: 'spring', stiffness: 300, damping: 20 }}
-                          >
-                            <div className="w-9 h-9 rounded-lg bg-green-100 dark:bg-green-500/10 flex items-center justify-center">
-                              <FontAwesomeIcon
-                                icon={faLockOpen}
-                                className="w-4 h-4 text-green-600 dark:text-green-400"
-                              />
-                            </div>
-                          </motion.div>
-                        ) : (
-                          <motion.div
-                            key="locked"
-                            initial={{ scale: 0.5, opacity: 0 }}
-                            animate={{ scale: 1, opacity: 1 }}
-                            exit={{ scale: 0.5, opacity: 0 }}
-                            transition={{ type: 'spring', stiffness: 300, damping: 20 }}
-                          >
-                            <div className="w-9 h-9 rounded-lg bg-muted flex items-center justify-center">
-                              <FontAwesomeIcon
-                                icon={faLock}
-                                className="w-4 h-4 text-muted-foreground"
-                              />
-                            </div>
-                          </motion.div>
-                        )}
-                      </AnimatePresence>
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <h2 className="text-lg font-bold text-foreground tracking-tight">
-                            {MEAL_LABELS_I18N[mealType]}
-                          </h2>
-                          {menu?.specialLabel && (
-                            <motion.span
-                              initial={{ scale: 0.7, opacity: 0 }}
-                              animate={{ scale: 1, opacity: 1 }}
-                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-gradient-to-r from-amber-100 to-orange-100 dark:from-amber-500/15 dark:to-orange-500/15 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-500/20 shadow-sm"
-                            >
-                              <FontAwesomeIcon icon={faCrown} className="w-2.5 h-2.5" />
-                              {menu.specialLabel}
-                            </motion.span>
-                          )}
-                        </div>
-                        <p className="text-xs text-muted-foreground font-medium">{timing}</p>
-                      </div>
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-3">
+                    {/* Lock/unlock icon */}
+                    <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${
+                      isSubmitted
+                        ? 'bg-green-100 dark:bg-green-500/10'
+                        : isOpen
+                          ? 'bg-green-100 dark:bg-green-500/10'
+                          : 'bg-muted'
+                    }`}>
+                      <FontAwesomeIcon
+                        icon={isSubmitted ? faCircleCheck : isOpen ? faLockOpen : faLock}
+                        className={`w-4 h-4 ${
+                          isSubmitted
+                            ? 'text-green-600 dark:text-green-400'
+                            : isOpen
+                              ? 'text-green-600 dark:text-green-400'
+                              : 'text-muted-foreground'
+                        }`}
+                      />
                     </div>
-                    {isSubmitted && (
-                      <Badge variant="secondary" className="text-[10px] font-semibold uppercase tracking-wider rounded-md bg-green-100 dark:bg-green-500/10 text-green-700 dark:text-green-400 border-green-200 dark:border-green-500/20">
-                        <FontAwesomeIcon icon={faCircleCheck} className="w-3 h-3 mr-1" />
-                        {t.student.reviewed}
-                      </Badge>
-                    )}
-                    {!isOpen && !isSubmitted && (
-                      <Badge variant="secondary" className="text-[10px] font-semibold uppercase tracking-wider rounded-md">
-                        <FontAwesomeIcon icon={faLock} className="w-3 h-3 mr-1" />
+
+                    {/* Meal info */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <h2 className="text-sm font-bold text-foreground tracking-tight">
+                          {MEAL_LABELS_I18N[mealType]}
+                        </h2>
+                        {menu?.specialLabel && (
+                          <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[9px] font-semibold bg-gradient-to-r from-amber-100 to-orange-100 dark:from-amber-500/15 dark:to-orange-500/15 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-500/20">
+                            <FontAwesomeIcon icon={faCrown} className="w-2 h-2" />
+                            {menu.specialLabel}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-muted-foreground truncate">{timing}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{items}</p>
+                    </div>
+
+                    {/* Right side badge/action */}
+                    {isSubmitted ? (
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <div className="flex gap-0.5">
+                          {[1, 2, 3, 4, 5].map((star) => (
+                            <FontAwesomeIcon icon={faStar} key={star}
+                              className={`w-2.5 h-2.5 ${star <= (review?.existingRating || 0) ? 'text-primary' : 'text-zinc-200 dark:text-zinc-700'}`}
+                            />
+                          ))}
+                        </div>
+                        <span className="text-lg">{['😡', '🙁', '😐', '🙂', '😍'][(review?.existingRating || 1) - 1]}</span>
+                      </div>
+                    ) : isOpen ? (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="rounded-full text-xs px-3 h-7 shrink-0 border-primary/30 text-primary font-semibold"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          hapticLight()
+                          setActiveSheet(mealType)
+                        }}
+                      >
+                        Rate
+                      </Button>
+                    ) : (
+                      <Badge variant="secondary" className="text-[9px] shrink-0">
+                        <FontAwesomeIcon icon={faLock} className="w-2.5 h-2.5 mr-0.5" />
                         {t.student.locked}
                       </Badge>
                     )}
                   </div>
-
-                  {/* Menu Items */}
-                  <p className="text-muted-foreground text-sm leading-relaxed mb-4 pl-[46px]">
-                    {items}
-                  </p>
-
-                  {/* Submitted State — Professional Thank You Confirmation */}
-                  {isSubmitted ? (
-                    <motion.div
-                      initial={{ opacity: 0, y: 8 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ duration: 0.4, ease: 'easeOut' }}
-                      className="pl-[46px]"
-                    >
-                      <div className="flex items-start gap-3">
-                        <div className="flex-shrink-0 mt-0.5 w-7 h-7 rounded-full bg-green-100 dark:bg-green-500/10 flex items-center justify-center">
-                          <FontAwesomeIcon icon={faCircleCheck} className="w-3.5 h-3.5 text-green-600 dark:text-green-400" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-semibold text-foreground leading-tight">
-                            {t.student.thankYou}
-                          </p>
-                          <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
-                            {t.student.managementReceived}
-                          </p>
-                          <div className="flex items-center gap-2 mt-2">
-                            <span className="text-lg">{['😡', '🙁', '😐', '🙂', '😍'][(review?.existingRating || 1) - 1]}</span>
-                            <div className="flex gap-0.5">
-                              {[1, 2, 3, 4, 5].map((star) => (
-                                <FontAwesomeIcon icon={faStar} key={star}
-                                  className={`w-3 h-3 ${star <= (review?.existingRating || 0) ? 'text-primary' : 'text-zinc-200 dark:text-zinc-700'}`}
-                                />
-                              ))}
-                            </div>
-                            {review?.existingTags && review.existingTags.length > 0 && (
-                              <div className="flex flex-wrap gap-1 ml-1">
-                                {review.existingTags.map((tag) => (
-                                  <span key={tag} className="text-[10px] bg-muted text-muted-foreground px-2 py-0.5 rounded-full border border-border">{tag}</span>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    </motion.div>
-                  ) : isOpen ? (
-                    <div className="flex flex-col gap-3 pl-[46px]">
-                      {/* Interactive Slider Rating */}
-                      <div className="flex flex-col gap-2 mb-2">
-                        <Label className="text-xs text-muted-foreground font-medium">{t.student.rateExperience}</Label>
-                        <div className="flex items-center gap-4">
-                          <Slider
-                            value={[(review?.rating || 0) === 0 ? 3 : review!.rating]}
-                            onValueChange={(val: number[]) => setRating(mealType, val[0])}
-                            min={1}
-                            max={5}
-                            step={1}
-                            showTooltip
-                            tooltipContent={(value: number) => t.student.ratingLabels[value - 1]}
-                            aria-label="Rate your experience"
-                            className="flex-1"
-                          />
-                          <span className="text-3xl min-w-[40px] text-center transition-all duration-300 transform hover:scale-110">
-                            {(review?.rating || 0) > 0 ? (
-                              ["😡", "🙁", "😐", "🙂", "😍"][review!.rating - 1]
-                            ) : (
-                              <span className="opacity-50 grayscale transition-all duration-300">😐</span>
-                            )}
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Feedback Tags — change dynamically with slider rating */}
-                      <div className="flex flex-wrap gap-1.5 mb-2">
-                        <AnimatePresence mode="wait">
-                          {getTagsForRating(mealType, review?.rating || 3).map((tag: string) => {
-                            const isSelected = review?.tags?.includes(tag)
-                            return (
-                              <motion.button
-                                key={tag}
-                                initial={{ opacity: 0, scale: 0.85 }}
-                                animate={{ opacity: 1, scale: 1 }}
-                                exit={{ opacity: 0, scale: 0.85 }}
-                                transition={{ duration: 0.15 }}
-                                onClick={() => toggleTag(mealType, tag)}
-                                className={`text-[11px] font-medium px-2.5 py-1 rounded-full border transition-all duration-150 ${isSelected
-                                  ? 'bg-primary text-primary-foreground border-primary shadow-sm scale-105'
-                                  : 'bg-background text-muted-foreground border-border hover:border-primary/40 hover:text-foreground'
-                                  }`}
-                              >
-                                {tag}
-                              </motion.button>
-                            )
-                          })}
-                        </AnimatePresence>
-                      </div>
-
-                      {/* Review Input & Submit */}
-                      <div className="flex flex-col gap-2">
-                        <div className="flex gap-2">
-                          <Input
-                            type="text"
-                            value={review?.reviewText || ''}
-                            onChange={(e) => setReviewText(mealType, e.target.value)}
-                            placeholder={t.student.anythingToAdd}
-                            className="flex-1 h-10 text-sm"
-                          />
-                          <Button
-                            onClick={() => submitReview(mealType)}
-                            disabled={
-                              !review || review.submitting
-                            }
-                            size="icon"
-                            className="min-w-[40px] h-10 bg-black text-white hover:bg-neutral-800 dark:bg-white dark:text-black dark:hover:bg-neutral-200"
-                          >
-                            {review?.submitting ? (
-                              <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                            ) : (
-                              <FontAwesomeIcon icon={faArrowRight} className="w-5 h-5" />
-                            )}
-                          </Button>
-                        </div>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="pl-[46px]">
-                      <p className="text-xs text-muted-foreground italic">
-                        {t.student.reviewsOpenAt}
-                      </p>
-                    </div>
-                  )}
                 </CardContent>
               </Card>
             </BlurFade>
@@ -776,7 +659,137 @@ export default function StudentDashboard() {
         })}
       </div>
 
+      {/* ── Bottom Sheet Review Modal ── */}
+      {MEAL_ORDER.map((mealType) => {
+        const review = reviews[mealType]
+        const menu = getMenuForMeal(mealType)
+        const items = menu?.items || DEFAULT_ITEMS_I18N[mealType]
+        const mealTiming = mealTimings?.[mealType]
+        const timing = mealTiming?.display || menu?.timing || ''
+
+        return (
+          <BottomSheet
+            key={mealType}
+            open={activeSheet === mealType}
+            onClose={() => setActiveSheet(null)}
+            title={`${MEAL_LABELS_I18N[mealType]} — Rate & Review`}
+          >
+            <div className="space-y-5">
+              {/* Menu preview */}
+              <div className="p-3 rounded-xl bg-muted/50">
+                <p className="text-xs text-muted-foreground font-medium mb-1">{timing}</p>
+                <p className="text-sm text-foreground leading-relaxed">{items}</p>
+              </div>
+
+              {/* Rating Slider */}
+              <div className="space-y-3">
+                <Label className="text-xs text-muted-foreground font-medium">{t.student.rateExperience}</Label>
+                <div className="flex items-center gap-4">
+                  <Slider
+                    value={[(review?.rating || 0) === 0 ? 3 : review!.rating]}
+                    onValueChange={(val: number[]) => {
+                      hapticLight()
+                      setRating(mealType, val[0])
+                    }}
+                    min={1}
+                    max={5}
+                    step={1}
+                    showTooltip
+                    tooltipContent={(value: number) => t.student.ratingLabels[value - 1]}
+                    aria-label="Rate your experience"
+                    className="flex-1"
+                  />
+                  <span className="text-4xl min-w-[48px] text-center">
+                    {(review?.rating || 0) > 0
+                      ? ['😡', '🙁', '😐', '🙂', '😍'][review!.rating - 1]
+                      : <span className="opacity-50 grayscale">😐</span>
+                    }
+                  </span>
+                </div>
+              </div>
+
+              {/* Feedback Tags */}
+              <div className="space-y-2">
+                <Label className="text-xs text-muted-foreground font-medium">Quick feedback</Label>
+                <div className="flex flex-wrap gap-2">
+                  <AnimatePresence mode="wait">
+                    {getTagsForRating(mealType, review?.rating || 3).map((tag: string) => {
+                      const isSelected = review?.tags?.includes(tag)
+                      return (
+                        <motion.button
+                          key={tag}
+                          initial={{ opacity: 0, scale: 0.85 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          exit={{ opacity: 0, scale: 0.85 }}
+                          transition={{ duration: 0.15 }}
+                          onClick={() => {
+                            hapticLight()
+                            toggleTag(mealType, tag)
+                          }}
+                          className={`text-xs font-medium px-3 py-1.5 rounded-full border transition-all duration-150 ${isSelected
+                            ? 'bg-primary text-primary-foreground border-primary shadow-sm'
+                            : 'bg-background text-muted-foreground border-border hover:border-primary/40'
+                          }`}
+                        >
+                          {tag}
+                        </motion.button>
+                      )
+                    })}
+                  </AnimatePresence>
+                </div>
+              </div>
+
+              {/* Review Text */}
+              <div className="space-y-2">
+                <Label className="text-xs text-muted-foreground font-medium">{t.student.anythingToAdd}</Label>
+                <Input
+                  type="text"
+                  value={review?.reviewText || ''}
+                  onChange={(e) => setReviewText(mealType, e.target.value)}
+                  placeholder="Optional comment..."
+                  className="h-11 text-sm"
+                />
+              </div>
+
+              {/* Submit button */}
+              <Button
+                onClick={() => {
+                  submitReview(mealType)
+                  setActiveSheet(null)
+                  hapticSuccess()
+                }}
+                disabled={!review || review.submitting}
+                className="w-full h-12 rounded-xl text-sm font-semibold"
+              >
+                {review?.submitting ? (
+                  <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                ) : (
+                  <>
+                    <FontAwesomeIcon icon={faArrowRight} className="w-4 h-4 mr-2" />
+                    Submit Review
+                  </>
+                )}
+              </Button>
+            </div>
+          </BottomSheet>
+        )
+      })}
+
       <div className="h-8" />
+
+      {/* Floating QR FAB — always visible on mobile for quick check-in */}
+      {checkinStatus && !checkinStatus.checkedIn && (
+        <Link href="/student/scan" className="fixed bottom-28 right-5 z-20 lg:hidden">
+          <motion.div
+            initial={{ scale: 0, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={{ type: 'spring', stiffness: 260, damping: 20, delay: 0.5 }}
+            className="w-14 h-14 rounded-full bg-primary text-primary-foreground shadow-lg flex items-center justify-center active:scale-90 transition-transform"
+          >
+            <FontAwesomeIcon icon={faQrcode} className="w-6 h-6" />
+          </motion.div>
+        </Link>
+      )}
     </div>
     </PullToRefresh>
   )

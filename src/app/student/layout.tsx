@@ -251,7 +251,7 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
             </div>
             <div className="flex items-center gap-1">
               {user.hostelBlock && (
-                <Badge variant="secondary" className="text-[10px] mr-1 rounded-full">
+                <Badge variant="secondary" className="text-[10px] mr-1 rounded-full max-w-[90px] sm:max-w-none truncate">
                   {user.hostelBlock}
                 </Badge>
               )}

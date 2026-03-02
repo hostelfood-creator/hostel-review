@@ -32,8 +32,10 @@
     "@upstash/redis": "^1.36.2",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.0",
+    "exceljs": "^4.4.0",
     "framer-motion": "^12.34.3",
     "jsqr": "^1.4.0",
+    "lucide-react": "^0.576.0",
     "next": "16.1.6",
     "nodemailer": "^8.0.1",
     "react": "^19.2.4",
@@ -41,8 +43,7 @@
     "recharts": "^2.12.0",
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.5.0",
-    "tailwindcss-animate": "^1.0.7",
-    "xlsx": "^0.18.5"
+    "tailwindcss-animate": "^1.0.7"
   },
   "devDependencies": {
     "@types/node": "^20.11.0",

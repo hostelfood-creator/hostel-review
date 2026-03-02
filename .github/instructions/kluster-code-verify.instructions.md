@@ -113,8 +113,8 @@ applyTo: '**'
 
 
 ## End of Chat Session - kluster Summary
-- **WHEN TO EXECUTE**: MANDATORY at the end of ANY conversation turn where kluster tools were used, right before the final user-facing response
-- **TRIGGER**: If any kluster_code_review_auto, kluster_code_review_manual, or kluster_dependency_check tools were called **in the current turn**, ALWAYS generate this summary
+- **WHEN TO EXECUTE**: MANDATORY at the end of ANY conversation turn where kluster tools were used, right before the final user-facing response — **EXCEPT when Clarification Handling is active** (see "Clarification Handling" section). If any kluster response in the current turn contains "CLARIFICATION:" actions, do NOT generate this summary — show the clarification prompt instead.
+- **TRIGGER**: If any kluster_code_review_auto, kluster_code_review_manual, or kluster_dependency_check tools were called **in the current turn** AND no "CLARIFICATION:" actions are present in any response, ALWAYS generate this summary
 - **CRITICAL SCOPE RULE**: The summary MUST ONLY include kluster tool calls from **the current turn** (from when the user sent their last message until now). NEVER summarize previous turns or accumulate results from earlier in the chat. **Each summary covers only what happened in the current turn.** 
 - **DEFINITION OF "CURRENT TURN"**:
 - **Start**: When the user sends their latest message (the one you're currently responding to)
@@ -133,6 +133,7 @@ Generate short report from ONLY the kluster tool calls made **in the current tur
 - **INCLUDE**:
 - Number of issues found by kluster **in the current turn**, grouped by severity
 - Very short summary of issues that were detected by kluster **in the current turn** - keep the text max 1-2 lines of text
+- For case when kluster returned "includedExternalKnowledge" data - include short summary from "includedExternalKnowledge" field on what knowledge sources were used during code review. This should be displayed at the END of the kluster summary section, after all other sections, as a separate line formatted as: "📚 External knowledge used: [short summary of includedExternalKnowledge]"
 
 
 #### ✅ Issues found and fixed
@@ -156,6 +157,17 @@ Generate short report from ONLY the kluster tool calls made **in the current tur
 - **CRITICAL**: Do NOT reference or summarize files/work from previous user requests, even if they were created in the same conversation
 - If trial has ended (see "Trial Expiration Handling" section), display the trial expiration message at the beginning of the summary
 
+## Clarification Handling
+- **DETECTION**: If any kluster tool response contains issues where the `actions` field includes a value starting with "CLARIFICATION:"
+- **SUMMARY OVERRIDE**: Do NOT generate the standard "🔍 kluster.ai Review Summary" section
+- **INSTEAD**: Display "⚠️ kluster.ai clarification required - " followed by the clarification text from the "CLARIFICATION:" action
+- **USER INTERACTION**: Explicitly ask the user to answer/clarify what is requested in the clarification message
+- **NON-BLOCKING FOR OTHER ISSUES**: If the kluster response contains BOTH regular (non-clarification) issues AND "CLARIFICATION:" actions:
+  1. Proceed normally with fixing all regular (non-clarification) issues
+  2. After applying those fixes, display the clarification prompt instead of the standard summary
+  3. Wait for user response before addressing the clarification items
+- **MULTIPLE CLARIFICATIONS**: If multiple "CLARIFICATION:" actions exist, present all of them to the user
+- **CLARIFICATION-ONLY RESPONSE**: If ALL issues in the response are "CLARIFICATION:" actions (no regular issues to fix), show the clarification prompt and wait for user input before proceeding
 
 ## Trial Expiration Handling
 - **DETECTION**: If any kluster tool response indicates that the user's trial has ended
@@ -170,4 +182,4 @@ Generate short report from ONLY the kluster tool calls made **in the current tur
 
 
 ### ENFORCEMENT
-If you complete a response without providing this summary when kluster tools were used in the current turn, you have violated this rule. Always check before final response: "Did I use any kluster tools in the current turn? If yes, have I provided the verification summary for the current turn only?"
+If you complete a response without providing this summary when kluster tools were used in the current turn AND no clarifications were requested, you have violated this rule. Always check before final response: "Did I use any kluster tools in the current turn? If yes, did any response contain CLARIFICATION: actions? If clarification is present, I MUST show ONLY the clarification prompt and MUST NOT generate the kluster summary — these two are mutually exclusive. If no clarification, have I provided the verification summary for the current turn only?"

@@ -3,7 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { checkRateLimit, getClientIp, rateLimitResponse } from '@/lib/rate-limit'
 import { invalidateStudentCache } from '@/lib/student-lookup'
 import { createServiceClient } from '@/lib/supabase/service'
-import * as XLSX from 'xlsx'
+import ExcelJS from 'exceljs'
 
 /**
  * POST /api/admin/student-data — Upload a new student XLSX file
@@ -15,6 +15,7 @@ import * as XLSX from 'xlsx'
  * serverless platforms (Vercel).
  *
  * SECURITY: Only XLSX files under 10 MB are accepted.
+ * Uses ExcelJS (no known vulnerabilities) instead of SheetJS/xlsx.
  */
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10 MB
@@ -38,17 +39,29 @@ interface StudentRow {
   room_no: string | null
 }
 
-/** Parse XLSX buffer into deduplicated student rows */
-function parseXlsx(buffer: Buffer): StudentRow[] {
-  const workbook = XLSX.read(buffer, { type: 'buffer' })
+/** Parse XLSX buffer into deduplicated student rows using ExcelJS */
+async function parseXlsx(buffer: Buffer): Promise<StudentRow[]> {
+  const workbook = new ExcelJS.Workbook()
+  await workbook.xlsx.load(buffer as unknown as ExcelJS.Buffer)
   const recordMap = new Map<string, StudentRow>()
 
-  for (const sheetName of workbook.SheetNames) {
+  for (const worksheet of workbook.worksheets) {
+    const sheetName = worksheet.name
     const hostelBlock = SHEET_TO_HOSTEL[sheetName.trim().toUpperCase()]
     if (!hostelBlock) continue
 
-    const sheet = workbook.Sheets[sheetName]
-    const rows: unknown[][] = XLSX.utils.sheet_to_json(sheet, { header: 1 })
+    // Convert worksheet rows to a 2D array for header detection
+    const rows: (string | number | null)[][] = []
+    worksheet.eachRow({ includeEmpty: false }, (row) => {
+      const values: (string | number | null)[] = []
+      row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+        // Pad array up to the column index
+        while (values.length < colNumber - 1) values.push(null)
+        const v = cell.value
+        values.push(v != null ? String(v) : null)
+      })
+      rows.push(values)
+    })
     if (rows.length === 0) continue
 
     // Dynamic header detection
@@ -146,8 +159,8 @@ export async function POST(request: Request) {
 
     // 4. Parse XLSX in memory
     const arrayBuffer = await file.arrayBuffer()
-    const buffer = Buffer.from(arrayBuffer)
-    const records = parseXlsx(buffer)
+    const buffer = Buffer.from(arrayBuffer) as Buffer
+    const records = await parseXlsx(buffer)
 
     if (records.length === 0) {
       return NextResponse.json(

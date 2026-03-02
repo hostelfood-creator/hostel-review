@@ -11,6 +11,9 @@ import { BlurFade } from '@/components/ui/blur-fade'
 import { Label } from '@/components/ui/label'
 import { Slider } from '@/components/ui/slider'
 import { BottomSheet } from '@/components/ui/bottom-sheet'
+import { ReviewSuccess } from '@/components/ui/review-success'
+import { AIVoiceInput } from '@/components/ui/ai-voice-input'
+import { HeroPill } from '@/components/ui/hero-pill'
 import { toast } from 'sonner'
 import { motion, AnimatePresence } from 'framer-motion'
 import Link from 'next/link'
@@ -136,6 +139,12 @@ export default function StudentDashboard() {
   const [mealTimings, setMealTimings] = useState<Record<string, MealTimingConfig> | null>(null)
   // Bottom sheet state for review modal
   const [activeSheet, setActiveSheet] = useState<string | null>(null)
+  // Review success animation state
+  const [reviewSuccess, setReviewSuccess] = useState<{ show: boolean; rating: number; meal: string }>({ show: false, rating: 0, meal: '' })
+  // Community ratings
+  const [communityRatings, setCommunityRatings] = useState<Record<string, { avg: number; count: number }>>({})
+  // Announcements
+  const [announcements, setAnnouncements] = useState<{ id: string; title: string; body: string; priority: string }[]>([])
 
   // i18n-aware meal labels
   const MEAL_LABELS_I18N: Record<string, string> = {
@@ -200,6 +209,28 @@ export default function StudentDashboard() {
       .then(r => r.json())
       .then(d => {
         if (d.timings) setMealTimings(d.timings as Record<string, MealTimingConfig>)
+      })
+      .catch(() => {})
+
+    // Fetch community ratings for today
+    fetch('/api/reviews/community')
+      .then(r => r.json())
+      .then(d => {
+        if (d.ratings) {
+          const map: Record<string, { avg: number; count: number }> = {}
+          for (const r of d.ratings) {
+            map[r.mealType] = { avg: r.avg, count: r.count }
+          }
+          setCommunityRatings(map)
+        }
+      })
+      .catch(() => {})
+
+    // Fetch announcements
+    fetch('/api/admin/announcements')
+      .then(r => r.json())
+      .then(d => {
+        if (d.announcements) setAnnouncements(d.announcements)
       })
       .catch(() => {})
   }, [])
@@ -389,7 +420,22 @@ export default function StudentDashboard() {
           },
         }))
         hapticSuccess()
-        // No toast - the in-card confirmation handles the feedback
+        // Close the bottom sheet and show success animation
+        setActiveSheet(null)
+        setReviewSuccess({ show: true, rating: review.rating, meal: MEAL_LABELS_I18N[mealType] || mealType })
+        // Refresh community ratings after submission
+        fetch('/api/reviews/community')
+          .then(r => r.json())
+          .then(d => {
+            if (d.ratings) {
+              const map: Record<string, { avg: number; count: number }> = {}
+              for (const r of d.ratings) {
+                map[r.mealType] = { avg: r.avg, count: r.count }
+              }
+              setCommunityRatings(map)
+            }
+          })
+          .catch(() => {})
       } else {
         const data = await res.json()
         toast.error(data.error || 'Failed to submit review')
@@ -444,6 +490,41 @@ export default function StudentDashboard() {
           </p>
         </BlurFade>
       </section>
+
+      {/* Announcements */}
+      {announcements.length > 0 && (
+        <BlurFade delay={0.32} inView>
+          <div className="space-y-2 mb-6">
+            {announcements.slice(0, 3).map((a) => (
+              <HeroPill
+                key={a.id}
+                label={a.title}
+                announcement={a.priority === 'urgent' ? '🚨 Urgent' : '📣 Notice'}
+                onClick={() => toast.info(a.body, { duration: 6000 })}
+              />
+            ))}
+          </div>
+        </BlurFade>
+      )}
+
+      {/* Community Ratings */}
+      {Object.keys(communityRatings).length > 0 && (
+        <BlurFade delay={0.33} inView>
+          <div className="flex flex-wrap gap-2 mb-6">
+            {MEAL_ORDER.map((meal) => {
+              const cr = communityRatings[meal]
+              if (!cr || cr.count === 0) return null
+              return (
+                <Badge key={meal} variant="secondary" className="text-xs px-2.5 py-1 gap-1">
+                  {MEAL_LABELS_I18N[meal]}:&nbsp;
+                  <span className="font-bold text-primary">{cr.avg.toFixed(1)}★</span>
+                  <span className="text-muted-foreground">({cr.count})</span>
+                </Badge>
+              )
+            })}
+          </div>
+        </BlurFade>
+      )}
 
       {/* Meal Check-in Card */}
       <BlurFade delay={0.35} inView>
@@ -749,14 +830,21 @@ export default function StudentDashboard() {
                   placeholder="Optional comment..."
                   className="h-11 text-sm"
                 />
+                {/* Voice-to-text input */}
+                <AIVoiceInput
+                  onTranscript={(text) => {
+                    const current = review?.reviewText || ''
+                    setReviewText(mealType, current ? `${current} ${text}` : text)
+                  }}
+                  visualizerBars={32}
+                  className="pt-0"
+                />
               </div>
 
               {/* Submit button */}
               <Button
                 onClick={() => {
                   submitReview(mealType)
-                  setActiveSheet(null)
-                  hapticSuccess()
                 }}
                 disabled={!review || review.submitting}
                 className="w-full h-12 rounded-xl text-sm font-semibold"
@@ -790,6 +878,14 @@ export default function StudentDashboard() {
           </motion.div>
         </Link>
       )}
+
+      {/* Review Success Animation Overlay */}
+      <ReviewSuccess
+        show={reviewSuccess.show}
+        rating={reviewSuccess.rating}
+        mealLabel={reviewSuccess.meal}
+        onComplete={() => setReviewSuccess({ show: false, rating: 0, meal: '' })}
+      />
     </div>
     </PullToRefresh>
   )

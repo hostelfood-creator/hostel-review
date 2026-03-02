@@ -2,13 +2,14 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { faMessage, faStar, faUsers, faBell, faTriangleExclamation, faScrewdriverWrench, faUtensils, faQrcode, faFileUpload, faPrint } from '@fortawesome/free-solid-svg-icons'
+import { faMessage, faStar, faUsers, faBell, faTriangleExclamation, faScrewdriverWrench, faUtensils, faQrcode, faFileUpload, faPrint, faBullhorn, faTrash } from '@fortawesome/free-solid-svg-icons'
 import dynamic from 'next/dynamic'
 import type { ChartsRowProps, SentimentChartProps, HeatmapProps, WeekOverWeekProps } from '@/components/admin-charts'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Button } from '@/components/ui/button'
 import { toast } from 'sonner'
@@ -119,6 +120,13 @@ export default function AdminDashboard() {
   const [attendanceLoading, setAttendanceLoading] = useState(true)
   const [uploadingFile, setUploadingFile] = useState(false)
   const [studentFileInfo, setStudentFileInfo] = useState<{ exists: boolean; filename?: string; sizeFormatted?: string; lastModified?: string } | null>(null)
+  // Announcements state
+  const [announcementsList, setAnnouncementsList] = useState<{ id: string; title: string; body: string; priority: string; targetBlock: string | null; expiresAt: string | null; createdAt: string }[]>([])
+  const [announcementTitle, setAnnouncementTitle] = useState('')
+  const [announcementBody, setAnnouncementBody] = useState('')
+  const [announcementPriority, setAnnouncementPriority] = useState('normal')
+  const [announcementTarget, setAnnouncementTarget] = useState('all')
+  const [announcementSending, setAnnouncementSending] = useState(false)
 
   const loadData = useCallback(async () => {
     setLoading(true)
@@ -153,6 +161,15 @@ export default function AdminDashboard() {
         console.error('Failed to load attendance')
       } finally {
         setAttendanceLoading(false)
+      }
+
+      // Fetch announcements
+      try {
+        const annRes = await fetch('/api/admin/announcements')
+        const annJson = await annRes.json()
+        setAnnouncementsList(annJson.announcements || [])
+      } catch {
+        console.error('Failed to load announcements')
       }
     } catch (err) {
       console.error('Failed to load analytics:', err)
@@ -243,6 +260,63 @@ export default function AdminDashboard() {
       toast.error('Network error')
     } finally {
       setTogglingMaintenance(false)
+    }
+  }
+
+  // Fetch student data file info for super admins
+  const handleCreateAnnouncement = async () => {
+    if (!announcementTitle.trim() || !announcementBody.trim()) {
+      toast.error('Title and body are required')
+      return
+    }
+    setAnnouncementSending(true)
+    try {
+      const res = await fetch('/api/admin/announcements', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: announcementTitle.trim(),
+          body: announcementBody.trim(),
+          priority: announcementPriority,
+          targetBlock: announcementTarget === 'all' ? null : announcementTarget,
+        }),
+      })
+      if (res.ok) {
+        toast.success('Announcement published')
+        setAnnouncementTitle('')
+        setAnnouncementBody('')
+        setAnnouncementPriority('normal')
+        setAnnouncementTarget('all')
+        // Refresh list
+        const annRes = await fetch('/api/admin/announcements')
+        const annJson = await annRes.json()
+        setAnnouncementsList(annJson.announcements || [])
+      } else {
+        const data = await res.json()
+        toast.error(data.error || 'Failed to create announcement')
+      }
+    } catch {
+      toast.error('Network error')
+    } finally {
+      setAnnouncementSending(false)
+    }
+  }
+
+  const handleDeleteAnnouncement = async (id: string) => {
+    try {
+      const res = await fetch('/api/admin/announcements', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id }),
+      })
+      if (res.ok) {
+        toast.success('Announcement deleted')
+        setAnnouncementsList(prev => prev.filter(a => a.id !== id))
+      } else {
+        toast.error('Failed to delete announcement')
+      }
+    } catch {
+      toast.error('Network error')
     }
   }
 
@@ -707,6 +781,97 @@ export default function AdminDashboard() {
           </CardContent>
         </Card>
       )}
+
+      {/* Broadcast Announcements */}
+      <Card className="rounded-xl mb-6">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm font-semibold flex items-center gap-2">
+            <FontAwesomeIcon icon={faBullhorn} className="w-3.5 h-3.5 text-primary" />
+            Broadcast Announcements
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <Input
+              placeholder="Announcement title..."
+              value={announcementTitle}
+              onChange={(e) => setAnnouncementTitle(e.target.value)}
+              className="h-10 text-sm"
+            />
+            <div className="flex gap-2">
+              <Select value={announcementPriority} onValueChange={setAnnouncementPriority}>
+                <SelectTrigger className="flex-1">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="normal">Normal</SelectItem>
+                  <SelectItem value="urgent">Urgent</SelectItem>
+                </SelectContent>
+              </Select>
+              {data.userRole === 'super_admin' && data.hostelBlocks.length > 0 && (
+                <Select value={announcementTarget} onValueChange={setAnnouncementTarget}>
+                  <SelectTrigger className="flex-1">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Blocks</SelectItem>
+                    {data.hostelBlocks.map((b) => (
+                      <SelectItem key={b} value={b}>{b}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            </div>
+          </div>
+          <textarea
+            value={announcementBody}
+            onChange={(e) => setAnnouncementBody(e.target.value)}
+            placeholder="Announcement message..."
+            className="w-full min-h-[80px] p-3 rounded-xl border bg-background text-sm text-foreground placeholder:text-muted-foreground resize-none focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
+            maxLength={1000}
+          />
+          <Button
+            onClick={handleCreateAnnouncement}
+            disabled={announcementSending || !announcementTitle.trim() || !announcementBody.trim()}
+            className="w-full sm:w-auto"
+          >
+            <FontAwesomeIcon icon={faBullhorn} className="w-3.5 h-3.5 mr-2" />
+            {announcementSending ? 'Publishing...' : 'Publish Announcement'}
+          </Button>
+
+          {/* Existing announcements */}
+          {announcementsList.length > 0 && (
+            <div className="space-y-2 pt-2 border-t">
+              <p className="text-[11px] text-muted-foreground font-medium uppercase tracking-wider">
+                Active Announcements ({announcementsList.length})
+              </p>
+              {announcementsList.map((a) => (
+                <div key={a.id} className="flex items-start gap-3 p-3 rounded-lg bg-muted/50">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-0.5">
+                      <p className="text-sm font-medium text-foreground truncate">{a.title}</p>
+                      {a.priority === 'urgent' && (
+                        <Badge variant="destructive" className="text-[9px]">Urgent</Badge>
+                      )}
+                      {a.targetBlock && (
+                        <Badge variant="secondary" className="text-[9px]">{a.targetBlock}</Badge>
+                      )}
+                    </div>
+                    <p className="text-xs text-muted-foreground line-clamp-2">{a.body}</p>
+                  </div>
+                  <button
+                    onClick={() => handleDeleteAnnouncement(a.id)}
+                    className="shrink-0 w-8 h-8 flex items-center justify-center rounded-lg hover:bg-red-100 dark:hover:bg-red-500/10 text-muted-foreground hover:text-red-500 transition-colors"
+                    title="Delete announcement"
+                  >
+                    <FontAwesomeIcon icon={faTrash} className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Sentiment Analysis */}
       <Card className="rounded-xl">

@@ -1,14 +1,15 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { faPaperPlane, faCommentDots, faClock, faCheckCircle, faSpinner, faHourglassHalf, faReply, faBroom, faUtensils, faScaleBalanced, faStopwatch, faPenToSquare } from '@fortawesome/free-solid-svg-icons'
+import { faPaperPlane, faCommentDots, faClock, faCheckCircle, faSpinner, faHourglassHalf, faReply, faBroom, faUtensils, faScaleBalanced, faStopwatch, faPenToSquare, faArrowLeft, faComments } from '@fortawesome/free-solid-svg-icons'
 import { createClient } from '@/lib/supabase/client'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { toast } from 'sonner'
+import { motion, AnimatePresence } from 'framer-motion'
 import { PullToRefresh } from '@/components/pull-to-refresh'
 import { queueComplaint, getPendingCount, flushPendingComplaints } from '@/lib/offline-queue'
 
@@ -21,6 +22,14 @@ interface Complaint {
     adminReply: string | null
     repliedAt: string | null
     repliedByName: string | null
+    createdAt: string
+}
+
+interface ChatMessage {
+    id: string
+    message: string
+    senderName: string
+    senderRole: string
     createdAt: string
 }
 
@@ -49,6 +58,14 @@ export default function StudentComplaintsPage() {
     const [hasMore, setHasMore] = useState(true)
     const [pendingCount, setPendingCount] = useState(0)
     const PAGE_SIZE = 15
+
+    // Threaded chat state
+    const [openChat, setOpenChat] = useState<string | null>(null) // complaint ID
+    const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
+    const [chatLoading, setChatLoading] = useState(false)
+    const [chatText, setChatText] = useState('')
+    const [chatSending, setChatSending] = useState(false)
+    const chatEndRef = useRef<HTMLDivElement>(null)
 
     const loadComplaints = useCallback(async (pageNum = 1, append = false) => {
         try {
@@ -150,6 +167,57 @@ export default function StudentComplaintsPage() {
             setComplaintText('')
             setCategory('other')
         } finally { setSubmitting(false) }
+    }
+
+    // Load threaded messages for a complaint
+    const loadChatMessages = useCallback(async (complaintId: string) => {
+        setChatLoading(true)
+        try {
+            const res = await fetch(`/api/complaints/messages?complaintId=${complaintId}`)
+            const data = await res.json()
+            setChatMessages(data.messages || [])
+        } catch {
+            toast.error('Failed to load messages')
+        } finally {
+            setChatLoading(false)
+        }
+    }, [])
+
+    const openChatThread = useCallback((complaintId: string) => {
+        setOpenChat(complaintId)
+        setChatText('')
+        loadChatMessages(complaintId)
+    }, [loadChatMessages])
+
+    // Auto-scroll to bottom when messages change
+    useEffect(() => {
+        if (openChat && chatEndRef.current) {
+            chatEndRef.current.scrollIntoView({ behavior: 'smooth' })
+        }
+    }, [chatMessages, openChat])
+
+    const sendChatMessage = async () => {
+        const text = chatText.trim()
+        if (!text || !openChat) return
+        setChatSending(true)
+        try {
+            const res = await fetch('/api/complaints/messages', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ complaintId: openChat, message: text }),
+            })
+            if (res.ok) {
+                setChatText('')
+                loadChatMessages(openChat)
+            } else {
+                const data = await res.json()
+                toast.error(data.error || 'Failed to send message')
+            }
+        } catch {
+            toast.error('Network error')
+        } finally {
+            setChatSending(false)
+        }
     }
 
     const formatDate = (dateStr: string) => {
@@ -265,7 +333,7 @@ export default function StudentComplaintsPage() {
                                     </div>
                                     <p className="text-sm text-foreground leading-relaxed mb-2">{c.complaintText}</p>
 
-                                    {/* Admin Reply */}
+                                    {/* Admin Reply (legacy) & Chat Thread Button */}
                                     {c.adminReply && (
                                         <div className="mt-3 p-3 rounded-lg bg-primary/5 border border-primary/10">
                                             <div className="flex items-center gap-1.5 mb-1.5">
@@ -279,6 +347,15 @@ export default function StudentComplaintsPage() {
                                             )}
                                         </div>
                                     )}
+
+                                    {/* Open chat thread */}
+                                    <button
+                                        onClick={() => openChatThread(c.id)}
+                                        className="mt-3 flex items-center gap-1.5 text-xs font-medium text-primary hover:text-primary/80 transition-colors"
+                                    >
+                                        <FontAwesomeIcon icon={faComments} className="w-3.5 h-3.5" />
+                                        View conversation
+                                    </button>
                                 </CardContent>
                             </Card>
                         )
@@ -299,6 +376,112 @@ export default function StudentComplaintsPage() {
                 </div>
             )}
         </div>
+
+        {/* Threaded Chat Overlay */}
+        <AnimatePresence>
+            {openChat && (
+                <motion.div
+                    initial={{ x: '100%' }}
+                    animate={{ x: 0 }}
+                    exit={{ x: '100%' }}
+                    transition={{ type: 'spring', damping: 30, stiffness: 300 }}
+                    className="fixed inset-0 z-50 bg-background flex flex-col"
+                >
+                    {/* Chat header */}
+                    <div className="flex items-center gap-3 px-5 py-4 border-b">
+                        <button
+                            onClick={() => setOpenChat(null)}
+                            className="w-9 h-9 rounded-lg bg-muted flex items-center justify-center hover:bg-muted/80 transition-colors"
+                        >
+                            <FontAwesomeIcon icon={faArrowLeft} className="w-4 h-4 text-foreground" />
+                        </button>
+                        <div className="flex-1 min-w-0">
+                            <p className="text-sm font-semibold text-foreground">Complaint Thread</p>
+                            <p className="text-[11px] text-muted-foreground truncate">
+                                {complaints.find(c => c.id === openChat)?.complaintText?.slice(0, 60)}...
+                            </p>
+                        </div>
+                        {(() => {
+                            const complaint = complaints.find(c => c.id === openChat)
+                            if (!complaint) return null
+                            const statusCfg = STATUS_CONFIG[complaint.status] || STATUS_CONFIG.pending
+                            return (
+                                <Badge variant={statusCfg.variant} className="text-[10px] shrink-0">
+                                    {statusCfg.label}
+                                </Badge>
+                            )
+                        })()}
+                    </div>
+
+                    {/* Chat messages */}
+                    <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
+                        {/* Original complaint as first message */}
+                        {(() => {
+                            const complaint = complaints.find(c => c.id === openChat)
+                            if (!complaint) return null
+                            return (
+                                <div className="flex justify-end">
+                                    <div className="max-w-[80%] rounded-2xl rounded-br-md px-4 py-2.5 bg-primary text-primary-foreground">
+                                        <p className="text-sm leading-relaxed">{complaint.complaintText}</p>
+                                        <p className="text-[10px] opacity-70 mt-1 text-right">{formatDate(complaint.createdAt)}</p>
+                                    </div>
+                                </div>
+                            )
+                        })()}
+
+                        {chatLoading ? (
+                            <div className="flex justify-center py-8">
+                                <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                            </div>
+                        ) : (
+                            chatMessages.map((msg) => {
+                                const isStudent = msg.senderRole === 'student'
+                                return (
+                                    <div key={msg.id} className={`flex ${isStudent ? 'justify-end' : 'justify-start'}`}>
+                                        <div className={`max-w-[80%] rounded-2xl px-4 py-2.5 ${
+                                            isStudent
+                                                ? 'bg-primary text-primary-foreground rounded-br-md'
+                                                : 'bg-muted text-foreground rounded-bl-md'
+                                        }`}>
+                                            {!isStudent && (
+                                                <p className="text-[10px] font-semibold mb-0.5 opacity-70">
+                                                    {msg.senderName} ({msg.senderRole === 'super_admin' ? 'Admin' : 'Admin'})
+                                                </p>
+                                            )}
+                                            <p className="text-sm leading-relaxed">{msg.message}</p>
+                                            <p className={`text-[10px] mt-1 ${isStudent ? 'text-right opacity-70' : 'opacity-50'}`}>
+                                                {formatDate(msg.createdAt)}
+                                            </p>
+                                        </div>
+                                    </div>
+                                )
+                            })
+                        )}
+                        <div ref={chatEndRef} />
+                    </div>
+
+                    {/* Chat input */}
+                    <div className="border-t px-5 py-3 flex items-center gap-2">
+                        <input
+                            type="text"
+                            value={chatText}
+                            onChange={(e) => setChatText(e.target.value)}
+                            onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChatMessage() } }}
+                            placeholder="Type a message..."
+                            className="flex-1 h-11 px-4 rounded-xl border bg-background text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
+                            disabled={chatSending}
+                        />
+                        <Button
+                            onClick={sendChatMessage}
+                            disabled={!chatText.trim() || chatSending}
+                            className="h-11 w-11 rounded-xl shrink-0 p-0"
+                        >
+                            <FontAwesomeIcon icon={faPaperPlane} className="w-4 h-4" />
+                        </Button>
+                    </div>
+                </motion.div>
+            )}
+        </AnimatePresence>
         </PullToRefresh>
     )
 }

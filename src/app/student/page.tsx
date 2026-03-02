@@ -912,7 +912,7 @@ export default function StudentDashboard() {
 
       {/* Floating QR FAB — always visible on mobile for quick check-in */}
       {checkinStatus && !checkinStatus.checkedIn && (
-        <Link href="/student/scan" className="fixed bottom-28 left-1/2 -translate-x-1/2 z-20 lg:hidden">
+        <Link href="/student/scan" className="fixed bottom-28 right-6 z-20 lg:hidden">
           <motion.div
             initial={{ scale: 0, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}

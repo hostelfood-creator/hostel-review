@@ -6,7 +6,7 @@ import {
     type HTMLMotionProps,
     type Variants,
     AnimatePresence,
-} from 'motion/react';
+} from 'framer-motion';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faPlus, faSpinner } from '@fortawesome/free-solid-svg-icons';
 import { cn } from '@/lib/utils';

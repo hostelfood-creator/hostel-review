@@ -757,13 +757,23 @@ export default function StudentDashboard() {
           >
             <div className="space-y-5">
               {/* Menu preview */}
-              <div className="p-3 rounded-xl bg-muted/50">
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.02, duration: 0.25 }}
+                className="p-3 rounded-xl bg-muted/50"
+              >
                 <p className="text-xs text-muted-foreground font-medium mb-1">{timing}</p>
                 <p className="text-sm text-foreground leading-relaxed">{items}</p>
-              </div>
+              </motion.div>
 
               {/* Rating Slider */}
-              <div className="space-y-3">
+              <motion.div
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.05, duration: 0.3 }}
+                className="space-y-3"
+              >
                 <Label className="text-xs text-muted-foreground font-medium">{t.student.rateExperience}</Label>
                 <div className="flex items-center gap-4">
                   <Slider
@@ -787,10 +797,15 @@ export default function StudentDashboard() {
                     }
                   </span>
                 </div>
-              </div>
+              </motion.div>
 
               {/* Feedback Tags */}
-              <div className="space-y-2">
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.08, duration: 0.25 }}
+                className="space-y-2"
+              >
                 <Label className="text-xs text-muted-foreground font-medium">Quick feedback</Label>
                 <div className="flex flex-wrap gap-2">
                   <AnimatePresence mode="wait">
@@ -818,10 +833,15 @@ export default function StudentDashboard() {
                     })}
                   </AnimatePresence>
                 </div>
-              </div>
+              </motion.div>
 
               {/* Review Text */}
-              <div className="space-y-2">
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.12, duration: 0.25 }}
+                className="space-y-2"
+              >
                 <Label className="text-xs text-muted-foreground font-medium">{t.student.anythingToAdd}</Label>
                 <Input
                   type="text"
@@ -839,9 +859,14 @@ export default function StudentDashboard() {
                   visualizerBars={32}
                   className="pt-0"
                 />
-              </div>
+              </motion.div>
 
               {/* Submit button */}
+              <motion.div
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.16, duration: 0.25 }}
+              >
               <Button
                 onClick={() => {
                   submitReview(mealType)
@@ -858,6 +883,7 @@ export default function StudentDashboard() {
                   </>
                 )}
               </Button>
+              </motion.div>
             </div>
           </BottomSheet>
         )
@@ -867,12 +893,14 @@ export default function StudentDashboard() {
 
       {/* Floating QR FAB — always visible on mobile for quick check-in */}
       {checkinStatus && !checkinStatus.checkedIn && (
-        <Link href="/student/scan" className="fixed bottom-28 right-5 z-20 lg:hidden">
+        <Link href="/student/scan" className="fixed bottom-28 right-6 z-20 lg:hidden">
           <motion.div
             initial={{ scale: 0, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
+            whileHover={{ scale: 1.1 }}
+            whileTap={{ scale: 0.9 }}
             transition={{ type: 'spring', stiffness: 260, damping: 20, delay: 0.5 }}
-            className="w-14 h-14 rounded-full bg-primary text-primary-foreground shadow-lg flex items-center justify-center active:scale-90 transition-transform"
+            className="w-14 h-14 rounded-full bg-primary text-primary-foreground shadow-xl flex items-center justify-center"
           >
             <FontAwesomeIcon icon={faQrcode} className="w-6 h-6" />
           </motion.div>

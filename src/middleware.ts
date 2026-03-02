@@ -108,8 +108,8 @@ export async function middleware(request: NextRequest) {
     response.headers.set('X-Content-Type-Options', 'nosniff')
     response.headers.set('X-Frame-Options', 'DENY')
     response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin')
-    // camera=(self) — required for QR scanner; matches next.config.js
-    response.headers.set('Permissions-Policy', 'camera=(self), microphone=(), geolocation=(), interest-cohort=()')
+    // camera=(self) + microphone=(self) — required for QR scanner and voice input; matches next.config.js
+    response.headers.set('Permissions-Policy', 'camera=(self), microphone=(self), geolocation=(), interest-cohort=()')
     response.headers.set('X-DNS-Prefetch-Control', 'on')
     if (isProd) {
       response.headers.set('Strict-Transport-Security', 'max-age=63072000; includeSubDomains; preload')

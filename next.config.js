@@ -19,8 +19,8 @@ const nextConfig = {
             // Control referrer information leakage
             { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
 
-            // Camera allowed for same-origin (QR scanner); disable all other invasive APIs
-            { key: 'Permissions-Policy', value: 'camera=(self), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()' },
+            // Camera + microphone allowed for same-origin (QR scanner + voice input); disable other invasive APIs
+            { key: 'Permissions-Policy', value: 'camera=(self), microphone=(self), geolocation=(), payment=(), usb=(), interest-cohort=()' },
 
             // Cross-Origin isolation headers — prevent Spectre-class attacks
             // Use same-origin-allow-popups to allow OAuth/Supabase popups

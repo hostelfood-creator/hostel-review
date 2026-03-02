@@ -36,6 +36,10 @@ export const metadata: Metadata = {
     description: 'Rate your hostel meals and help the management improve food quality.',
     images: ['/og-image.png'],
   },
+  icons: {
+    icon: '/college-logo.png',
+    apple: '/college-logo.png',
+  },
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,

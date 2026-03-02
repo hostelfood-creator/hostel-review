@@ -91,7 +91,7 @@ self.addEventListener('fetch', (event) => {
 
 // Push notification handler
 self.addEventListener('push', (event) => {
-  let data = { title: 'Hostel Food Review', body: 'You have a new notification', icon: '/icon-192.png' }
+  let data = { title: 'Hostel Food Review', body: 'You have a new notification', icon: '/college-logo.png' }
 
   if (event.data) {
     try {
@@ -103,8 +103,8 @@ self.addEventListener('push', (event) => {
 
   const options = {
     body: data.body,
-    icon: data.icon || '/icon-192.png',
-    badge: '/icon-192.png',
+    icon: data.icon || '/college-logo.png',
+    badge: '/college-logo.png',
     vibrate: [100, 50, 100],
     data: {
       url: data.url || '/student',

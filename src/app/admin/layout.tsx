@@ -18,6 +18,7 @@ interface User {
   name: string
   registerId: string
   role: string
+  hostelBlock?: string
 }
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
@@ -144,7 +145,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         <div className="px-3 py-4 border-t">
           <div className="flex items-center gap-3 px-3 mb-3">
             <div className="flex-1 min-w-0">
-              <p className="text-sm text-foreground font-medium truncate">{user.name}</p>
+              <p className="text-sm text-foreground font-medium truncate">{user.name}{user.hostelBlock ? ` · ${user.hostelBlock}` : ''}</p>
               <p className="text-[10px] text-muted-foreground uppercase tracking-wider">{user.role}</p>
             </div>
           </div>

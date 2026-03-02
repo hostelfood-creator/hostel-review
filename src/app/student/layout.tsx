@@ -215,8 +215,7 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
               </AvatarFallback>
             </Avatar>
             <div className="flex-1 min-w-0">
-              <p className="text-sm text-foreground font-medium truncate">{user.name}</p>
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wider">{user.role}</p>
+              <p className="text-sm text-foreground font-medium truncate">{user.name}{user.hostelBlock ? ` · ${user.hostelBlock}` : ''}</p>
             </div>
           </div>
           <Button

@@ -81,12 +81,6 @@ const MEAL_LABELS: Record<string, string> = {
   snacks: 'SNACKS',
   dinner: 'DINNER',
 }
-const DEFAULT_TIMING: Record<string, string> = {
-  breakfast: '7:30 - 9:30 AM',
-  lunch: '12:30 - 2:30 PM',
-  snacks: '4:30 - 5:30 PM',
-  dinner: '7:30 - 9:30 PM',
-}
 const DEFAULT_ITEMS: Record<string, string> = {
   breakfast: 'Menu not yet updated for today',
   lunch: 'Menu not yet updated for today',
@@ -94,35 +88,35 @@ const DEFAULT_ITEMS: Record<string, string> = {
   dinner: 'Menu not yet updated for today',
 }
 
-/** Parse timing like "7:30 - 9:30 AM" or "7:30 - 9:30 PM" and return the start hour in 24h format */
-function getMealStartHour(timing: string): number {
-  if (!timing) return 0
-
-  // Extract the start hour from the full timing string
-  const startPart = timing.split(/[-–—]/, 1)[0].trim()
-  const match = startPart.match(/(\d{1,2})[:.]?\d{0,2}\s*(am|pm)?/i)
-  if (!match) return 0
-
-  let hour = parseInt(match[1], 10)
-
-  // If the start part has its own AM/PM, use that.
-  // Otherwise, inherit the AM/PM from the END of the full timing string
-  // (e.g. "7:30 - 9:30 PM" → start is also PM).
-  let period = match[2]?.toUpperCase() || null
-  if (!period) {
-    const fullMatch = timing.match(/(am|pm)\s*$/i)
-    period = fullMatch ? fullMatch[1].toUpperCase() : null
-  }
-
-  if (period === 'PM' && hour < 12) hour += 12
-  if (period === 'AM' && hour === 12) hour = 0
-  return hour
+/** Admin-configurable meal timing from /api/meal-timings */
+interface MealTimingConfig {
+  start: string   // "07:00" HH:MM 24h
+  end: string     // "10:00"
+  label: string   // "Breakfast"
+  display: string // "7:00 AM – 10:00 AM"
 }
 
-/** Check if meal review is open: opens at meal start time, stays open until midnight */
-function isMealOpen(timing: string, currentHour: number): boolean {
-  const startHour = getMealStartHour(timing)
-  return currentHour >= startHour
+/** Parse HH:MM into total minutes since midnight */
+function parseTimeToMinutes(hhmm: string): number {
+  const [h, m] = hhmm.split(':').map(Number)
+  return h * 60 + m
+}
+
+/**
+ * Check if a meal review is open based on admin-configured timing window.
+ * Reviews unlock at the meal start time and lock after the meal end time.
+ * Uses IST server time (hours + minutes) for precise comparison.
+ */
+function isMealOpen(
+  timing: MealTimingConfig | undefined,
+  serverHour: number,
+  serverMinute: number
+): boolean {
+  if (!timing) return false
+  const now = serverHour * 60 + serverMinute
+  const start = parseTimeToMinutes(timing.start)
+  const end = parseTimeToMinutes(timing.end)
+  return now >= start && now < end
 }
 
 export default function StudentDashboard() {
@@ -132,11 +126,13 @@ export default function StudentDashboard() {
   const [todayDate, setTodayDate] = useState('')
   const [displayDate, setDisplayDate] = useState('')
   const [serverHour, setServerHour] = useState(new Date().getHours())
+  const [serverMinute, setServerMinute] = useState(new Date().getMinutes())
   const [userName, setUserName] = useState('')
   const [userHostelBlock, setUserHostelBlock] = useState<string | null>(null)
   const [checkinStatus, setCheckinStatus] = useState<{ checkedIn: boolean; mealType?: string; mealLabel?: string } | null>(null)
   const [weeklyHistory, setWeeklyHistory] = useState<{ date: string; meals: string[] }[] | null>(null)
   const [weeklyPercentage, setWeeklyPercentage] = useState(0)
+  const [mealTimings, setMealTimings] = useState<Record<string, MealTimingConfig> | null>(null)
 
   // i18n-aware meal labels
   const MEAL_LABELS_I18N: Record<string, string> = {
@@ -195,6 +191,14 @@ export default function StudentDashboard() {
         if (d.summary) setWeeklyPercentage(d.summary.percentage)
       })
       .catch(() => {})
+
+    // Fetch admin-configured meal timings (public endpoint)
+    fetch('/api/meal-timings')
+      .then(r => r.json())
+      .then(d => {
+        if (d.timings) setMealTimings(d.timings as Record<string, MealTimingConfig>)
+      })
+      .catch(() => {})
   }, [])
 
   const initReviewState = useCallback(() => {
@@ -212,21 +216,29 @@ export default function StudentDashboard() {
       const data = await res.json()
       setTodayDate(data.date)
       setDisplayDate(data.display)
-      // Use hours from API; fallback: derive from timestamp in IST
+      // Use hours + minutes from API for precise meal window checks
       if (typeof data.hours === 'number') {
         setServerHour(data.hours)
+        setServerMinute(typeof data.minutes === 'number' ? data.minutes : 0)
       } else if (data.timestamp) {
-        const istHour = parseInt(
-          new Date(data.timestamp).toLocaleString('en-US', { timeZone: 'Asia/Kolkata', hour: 'numeric', hour12: false }),
+        const d = new Date(data.timestamp)
+        const istH = parseInt(
+          d.toLocaleString('en-US', { timeZone: 'Asia/Kolkata', hour: 'numeric', hour12: false }),
           10
         )
-        setServerHour(isNaN(istHour) ? new Date().getHours() : istHour)
+        const istM = parseInt(
+          d.toLocaleString('en-US', { timeZone: 'Asia/Kolkata', minute: 'numeric' }),
+          10
+        )
+        setServerHour(isNaN(istH) ? new Date().getHours() : istH)
+        setServerMinute(isNaN(istM) ? new Date().getMinutes() : istM)
       }
     } catch {
       // Fallback to client time
       const now = new Date()
       setTodayDate(now.toISOString().split('T')[0])
       setServerHour(now.getHours())
+      setServerMinute(now.getMinutes())
     }
   }, [])
 
@@ -296,6 +308,12 @@ export default function StudentDashboard() {
       const histData = await histRes.json()
       if (histData.history) setWeeklyHistory(histData.history)
       if (histData.summary) setWeeklyPercentage(histData.summary.percentage)
+    } catch { /* ignore */ }
+    // Re-fetch meal timings (admin may have changed them)
+    try {
+      const timRes = await fetch('/api/meal-timings')
+      const timData = await timRes.json()
+      if (timData.timings) setMealTimings(timData.timings as Record<string, MealTimingConfig>)
     } catch { /* ignore */ }
     // Menu + reviews will reload via todayDate change
     toast.success('Dashboard refreshed')
@@ -536,9 +554,10 @@ export default function StudentDashboard() {
           const menu = getMenuForMeal(mealType)
           const review = reviews[mealType]
           const items = menu?.items || DEFAULT_ITEMS_I18N[mealType]
-          const timing = menu?.timing || DEFAULT_TIMING[mealType]
+          const mealTiming = mealTimings?.[mealType]
+          const timing = mealTiming?.display || menu?.timing || ''
           const isSubmitted = review?.submitted
-          const isOpen = isMealOpen(timing, serverHour)
+          const isOpen = isMealOpen(mealTiming, serverHour, serverMinute)
 
           return (
             <BlurFade key={mealType} delay={0.15 + index * 0.1} inView>

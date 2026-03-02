@@ -1,9 +1,35 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { createServiceClient } from '@/lib/supabase/service'
 import { getReviews, createReview, getStudentHostelBlocks } from '@/lib/db'
 import { getTodayDate, analyzeSentiment } from '@/lib/utils'
 import { checkRateLimit, getClientIp, rateLimitResponse } from '@/lib/rate-limit'
-import { getISTDateTime } from '@/lib/time'
+import { getISTDateTime, DEFAULT_MEAL_TIMINGS, formatTime } from '@/lib/time'
+
+/** Fetch admin-configured meal timings, fallback to defaults */
+async function getMealTimings(): Promise<Record<string, { start: string; end: string; label: string }>> {
+  try {
+    const serviceClient = createServiceClient()
+    const { data, error } = await serviceClient
+      .from('site_settings')
+      .select('meal_timings')
+      .eq('id', 1)
+      .single()
+
+    if (!error && data?.meal_timings && typeof data.meal_timings === 'object') {
+      return data.meal_timings as Record<string, { start: string; end: string; label: string }>
+    }
+  } catch {
+    // Fall back to defaults
+  }
+  return DEFAULT_MEAL_TIMINGS
+}
+
+/** Parse HH:MM into total minutes since midnight */
+function parseTimeToMinutes(hhmm: string): number {
+  const [h, m] = hhmm.split(':').map(Number)
+  return h * 60 + m
+}
 
 export async function GET(request: Request) {
   try {
@@ -129,6 +155,25 @@ export async function POST(request: Request) {
         { status: 400 }
       )
     }
+
+    // Server-side timing validation: only allow reviews during the admin-configured meal window
+    const timings = await getMealTimings()
+    const mealWindow = timings[mealType]
+    if (mealWindow) {
+      const { hours, minutes } = getISTDateTime()
+      const now = hours * 60 + minutes
+      const start = parseTimeToMinutes(mealWindow.start)
+      const end = parseTimeToMinutes(mealWindow.end)
+      if (now < start || now >= end) {
+        return NextResponse.json(
+          {
+            error: `Reviews for ${mealWindow.label} are only accepted between ${formatTime(mealWindow.start)} and ${formatTime(mealWindow.end)} IST`,
+          },
+          { status: 403 }
+        )
+      }
+    }
+
     const today = getTodayDate()
     const sentiment = reviewText ? analyzeSentiment(reviewText) : 'neutral'
 

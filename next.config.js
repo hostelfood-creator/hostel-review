@@ -1,4 +1,5 @@
 /** @type {import('next').NextConfig} */
+// Force clean build - 2026-03-02
 const isProd = process.env.NODE_ENV === 'production'
 
 const nextConfig = {

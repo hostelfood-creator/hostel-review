@@ -103,9 +103,9 @@ function parseTimeToMinutes(hhmm: string): number {
 }
 
 /**
- * Check if a meal review is open based on admin-configured timing window.
- * Reviews unlock at the meal start time and lock after the meal end time.
- * Uses IST server time (hours + minutes) for precise comparison.
+ * Check if a meal review is open based on admin-configured start time.
+ * Reviews unlock at the meal start time and stay open for the rest of the day.
+ * Only the start time matters — end time is not used for locking reviews.
  */
 function isMealOpen(
   timing: MealTimingConfig | undefined,
@@ -115,8 +115,7 @@ function isMealOpen(
   if (!timing) return false
   const now = serverHour * 60 + serverMinute
   const start = parseTimeToMinutes(timing.start)
-  const end = parseTimeToMinutes(timing.end)
-  return now >= start && now < end
+  return now >= start
 }
 
 export default function StudentDashboard() {

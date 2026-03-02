@@ -156,18 +156,18 @@ export async function POST(request: Request) {
       )
     }
 
-    // Server-side timing validation: only allow reviews during the admin-configured meal window
+    // Server-side timing validation: only allow reviews after the admin-configured start time
+    // Reviews unlock at the start time and stay open for the rest of the day
     const timings = await getMealTimings()
     const mealWindow = timings[mealType]
     if (mealWindow) {
       const { hours, minutes } = getISTDateTime()
       const now = hours * 60 + minutes
       const start = parseTimeToMinutes(mealWindow.start)
-      const end = parseTimeToMinutes(mealWindow.end)
-      if (now < start || now >= end) {
+      if (now < start) {
         return NextResponse.json(
           {
-            error: `Reviews for ${mealWindow.label} are only accepted between ${formatTime(mealWindow.start)} and ${formatTime(mealWindow.end)} IST`,
+            error: `Reviews for ${mealWindow.label} open at ${formatTime(mealWindow.start)} IST`,
           },
           { status: 403 }
         )

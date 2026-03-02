@@ -240,11 +240,15 @@ export async function GET(request: Request) {
   }
 }
 
-/** Escape CSV cell value — wraps in quotes if it contains commas, quotes, or newlines */
+/** Escape CSV cell value — wraps in quotes if it contains commas, quotes, or newlines.
+ *  Also neutralises formula injection (=, +, -, @, \t, \r) to prevent Excel/Sheets exploitation. */
 function csvEscape(value: string): string {
   if (!value) return ''
-  if (value.includes(',') || value.includes('"') || value.includes('\n')) {
-    return `"${value.replace(/"/g, '""')}"`
+  let v = value
+  // Prefix formula-triggering characters with a single-quote to neutralise them
+  if (/^[=+\-@\t\r]/.test(v)) v = "'" + v
+  if (v.includes(',') || v.includes('"') || v.includes('\n')) {
+    return `"${v.replace(/"/g, '""')}"`
   }
-  return value
+  return v
 }

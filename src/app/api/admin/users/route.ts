@@ -49,7 +49,11 @@ export async function GET(request: Request) {
     }
 
     if (search) {
-      query = query.or(`name.ilike.%${search}%,register_id.ilike.%${search}%,email.ilike.%${search}%`)
+      // Sanitize search to prevent PostgREST filter injection — strip metacharacters
+      const safeSearch = search.replace(/[,.()'"\\]/g, '')
+      if (safeSearch.length > 0) {
+        query = query.or(`name.ilike.%${safeSearch}%,register_id.ilike.%${safeSearch}%,email.ilike.%${safeSearch}%`)
+      }
     }
     if (roleFilter) query = query.eq('role', roleFilter)
     if (blockFilter) query = query.eq('hostel_block', blockFilter)

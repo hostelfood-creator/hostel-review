@@ -891,7 +891,7 @@ export default function StudentDashboard() {
                   submitReview(mealType)
                 }}
                 disabled={!review || review.submitting}
-                className="w-full h-12 rounded-xl text-sm font-semibold"
+                className="w-full h-12 rounded-xl text-sm font-semibold bg-zinc-900 hover:bg-zinc-800 text-white dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-100"
               >
                 {review?.submitting ? (
                   <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />

@@ -11,7 +11,6 @@ import { ThemeToggle } from '@/lib/theme'
 import { useTranslation } from '@/lib/i18n'
 import { LanguageSwitcher } from '@/components/language-switcher'
 import { WhatsNew } from '@/components/whats-new'
-import { AddToHomeScreen } from '@/components/add-to-homescreen'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -338,9 +337,6 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
             {children}
           </div>
         </main>
-
-        {/* Add to Home Screen prompt */}
-        <AddToHomeScreen />
 
         {/* Bottom Navigation — mobile only — center FAB QR */}
         <nav className="fixed bottom-0 left-0 right-0 z-30 bg-background/95 backdrop-blur-lg border-t pb-safe pt-3 px-4 transition-colors lg:hidden">

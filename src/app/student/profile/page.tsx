@@ -15,6 +15,7 @@ import { ThemeToggle } from '@/lib/theme'
 import { LanguageSwitcher } from '@/components/language-switcher'
 import { WhatsNew } from '@/components/whats-new'
 import { PullToRefresh } from '@/components/pull-to-refresh'
+import { ProfileInstallCard } from '@/components/add-to-homescreen'
 
 interface User {
   id: string
@@ -471,6 +472,11 @@ export default function ProfilePage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Install App — profile-only, non-intrusive */}
+      <div className="mt-6">
+        <ProfileInstallCard />
+      </div>
     </div>
     </PullToRefresh>
   )

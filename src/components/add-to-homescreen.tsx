@@ -1,33 +1,28 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { faMobileScreenButton, faXmark, faArrowUpFromBracket, faEllipsisVertical, faPlus } from '@fortawesome/free-solid-svg-icons'
+import {
+  faMobileScreenButton,
+  faArrowUpFromBracket,
+  faPlus,
+  faDownload,
+  faXmark,
+} from '@fortawesome/free-solid-svg-icons'
 import { Button } from '@/components/ui/button'
+import { Card, CardContent } from '@/components/ui/card'
 
-const DISMISS_KEY = 'a2hs_dismissed'
-const DISMISS_DURATION_MS = 7 * 24 * 60 * 60 * 1000 // Re-show after 7 days
+/* ─── Storage keys ─── */
+const INSTALLED_KEY = 'a2hs_installed'
+const DISMISSED_KEY = 'a2hs_dismissed'
 
 interface BeforeInstallPromptEvent extends Event {
   prompt(): Promise<void>
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>
 }
 
-/**
- * Detects whether the user is on iOS Safari (which lacks beforeinstallprompt).
- */
-function isIOSSafari(): boolean {
-  if (typeof navigator === 'undefined') return false
-  const ua = navigator.userAgent
-  const isIOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
-  const isSafari = /Safari/.test(ua) && !/CriOS|FxiOS|OPiOS|EdgiOS|Chrome/.test(ua)
-  return isIOS && isSafari
-}
-
-/**
- * Checks whether the app is already running in standalone/installed mode.
- */
+/** True when the app is already running as an installed PWA. */
 function isStandalone(): boolean {
   if (typeof window === 'undefined') return false
   return (
@@ -36,148 +31,220 @@ function isStandalone(): boolean {
   )
 }
 
-/**
- * Returns true if the user dismissed the prompt recently.
- */
-function wasDismissed(): boolean {
-  try {
-    const raw = localStorage.getItem(DISMISS_KEY)
-    if (!raw) return false
-    const ts = parseInt(raw, 10)
-    return Date.now() - ts < DISMISS_DURATION_MS
-  } catch {
-    return false
-  }
+/** True on iOS Safari, which doesn't support beforeinstallprompt. */
+function isIOSSafari(): boolean {
+  if (typeof navigator === 'undefined') return false
+  const ua = navigator.userAgent
+  const isIOS =
+    /iPad|iPhone|iPod/.test(ua) ||
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+  const isSafari =
+    /Safari/.test(ua) && !/CriOS|FxiOS|OPiOS|EdgiOS|Chrome/.test(ua)
+  return isIOS && isSafari
 }
 
-export function AddToHomeScreen() {
-  const [visible, setVisible] = useState(false)
-  const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null)
+/**
+ * Profile-only "Install App" card.
+ *
+ * Behaviour:
+ * - If the app is already installed (standalone mode or previously accepted) → renders nothing.
+ * - Shows a clean inline card with an Install button (Chrome/Edge) or iOS share instructions.
+ * - "Install" clicked → triggers native prompt; on accept → permanently hidden.
+ * - "Dismiss" (✕) clicked → card collapses into a tiny floating pill "Install App"
+ *   that stays visible on the profile page so the user can tap it any time.
+ * - The pill uses the same deferred prompt — clicking it triggers native install.
+ */
+export function ProfileInstallCard() {
+  const [ready, setReady] = useState(false)
+  const [hidden, setHidden] = useState(true) // hidden until we confirm eligibility
+  const [dismissed, setDismissed] = useState(false)
   const [iosMode, setIosMode] = useState(false)
+  const deferredRef = useRef<BeforeInstallPromptEvent | null>(null)
 
+  /* ── Initialise ── */
   useEffect(() => {
-    // Don't show if already installed or recently dismissed
-    if (isStandalone() || wasDismissed()) return
+    // Already installed or running standalone — never show anything
+    if (isStandalone()) {
+      try { localStorage.setItem(INSTALLED_KEY, '1') } catch { /* noop */ }
+      return
+    }
+    // Previously installed via prompt
+    try { if (localStorage.getItem(INSTALLED_KEY) === '1') return } catch { /* noop */ }
 
-    // iOS path
+    // Restore dismissed state from previous visit
+    try {
+      if (localStorage.getItem(DISMISSED_KEY) === '1') setDismissed(true)
+    } catch { /* noop */ }
+
     if (isIOSSafari()) {
-      const timer = setTimeout(() => {
-        setIosMode(true)
-        setVisible(true)
-      }, 4000)
-      return () => clearTimeout(timer)
+      setIosMode(true)
+      setHidden(false)
+      setReady(true)
+      return
     }
 
-    // Android / desktop Chrome path — listen for install prompt
     const handler = (e: Event) => {
       e.preventDefault()
-      setDeferredPrompt(e as BeforeInstallPromptEvent)
-      setTimeout(() => setVisible(true), 3000)
+      deferredRef.current = e as BeforeInstallPromptEvent
+      setHidden(false)
+      setReady(true)
     }
-
     window.addEventListener('beforeinstallprompt', handler)
     return () => window.removeEventListener('beforeinstallprompt', handler)
   }, [])
 
+  /* ── Install handler ── */
   const handleInstall = useCallback(async () => {
-    if (!deferredPrompt) return
-    await deferredPrompt.prompt()
-    const { outcome } = await deferredPrompt.userChoice
-    if (outcome === 'accepted') {
-      setVisible(false)
-    }
-    setDeferredPrompt(null)
-  }, [deferredPrompt])
+    if (iosMode) return // iOS has no programmatic install
 
+    const prompt = deferredRef.current
+    if (!prompt) return
+
+    await prompt.prompt()
+    const { outcome } = await prompt.userChoice
+    if (outcome === 'accepted') {
+      try { localStorage.setItem(INSTALLED_KEY, '1') } catch { /* noop */ }
+      setHidden(true)
+    }
+    deferredRef.current = null
+  }, [iosMode])
+
+  /* ── Dismiss handler — collapse to pill ── */
   const handleDismiss = useCallback(() => {
-    setVisible(false)
-    try { localStorage.setItem(DISMISS_KEY, String(Date.now())) } catch { /* noop */ }
+    setDismissed(true)
+    try { localStorage.setItem(DISMISSED_KEY, '1') } catch { /* noop */ }
   }, [])
 
-  return (
-    <AnimatePresence>
-      {visible && (
-        <motion.div
-          initial={{ y: 120, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          exit={{ y: 120, opacity: 0 }}
-          transition={{ type: 'spring', damping: 24, stiffness: 260 }}
-          className="fixed bottom-24 left-4 right-4 z-50 sm:left-auto sm:right-6 sm:max-w-sm"
-        >
-          <div className="relative bg-card border border-border rounded-2xl shadow-2xl p-4 overflow-hidden">
-            {/* Accent top stripe */}
-            <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-primary via-primary/70 to-primary/40" />
+  // Nothing to show
+  if (hidden || !ready) return null
 
-            {/* Dismiss button */}
+  /* ─── Collapsed pill (after dismiss) ─── */
+  if (dismissed) {
+    return (
+      <motion.button
+        initial={{ opacity: 0, scale: 0.8 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ type: 'spring', damping: 20, stiffness: 300 }}
+        onClick={iosMode ? () => setDismissed(false) : handleInstall}
+        className="flex items-center gap-2 px-3.5 py-2 rounded-full border bg-card shadow-sm hover:shadow-md hover:border-primary/30 transition-all group"
+        aria-label="Install app"
+      >
+        <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center shrink-0 group-hover:bg-primary/20 transition-colors">
+          <FontAwesomeIcon
+            icon={faDownload}
+            className="w-3 h-3 text-primary"
+          />
+        </div>
+        <span className="text-xs font-medium text-foreground">Install App</span>
+      </motion.button>
+    )
+  }
+
+  /* ─── Full inline card ─── */
+  return (
+    <AnimatePresence mode="wait">
+      <motion.div
+        key="install-card"
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: -8 }}
+        transition={{ type: 'spring', damping: 22, stiffness: 280 }}
+      >
+        <Card className="rounded-xl overflow-hidden relative">
+          {/* Accent stripe */}
+          <div className="absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r from-primary via-primary/60 to-transparent" />
+
+          <CardContent className="p-4">
+            {/* Dismiss */}
             <button
               onClick={handleDismiss}
               aria-label="Dismiss install prompt"
-              className="absolute top-3 right-3 w-7 h-7 flex items-center justify-center rounded-full hover:bg-accent text-muted-foreground transition-colors"
+              className="absolute top-3 right-3 w-6 h-6 flex items-center justify-center rounded-full hover:bg-accent text-muted-foreground/60 hover:text-muted-foreground transition-colors"
             >
-              <FontAwesomeIcon icon={faXmark} className="w-3.5 h-3.5" />
+              <FontAwesomeIcon icon={faXmark} className="w-3 h-3" />
             </button>
 
             {iosMode ? (
-              /* ─── iOS Safari Instructions ─── */
+              /* iOS instructions */
               <div className="pr-6">
                 <div className="flex items-center gap-3 mb-3">
-                  <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
-                    <FontAwesomeIcon icon={faMobileScreenButton} className="w-5 h-5 text-primary" />
+                  <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                    <FontAwesomeIcon
+                      icon={faMobileScreenButton}
+                      className="w-4 h-4 text-primary"
+                    />
                   </div>
                   <div>
-                    <p className="text-sm font-semibold text-foreground">Add to Home Screen</p>
-                    <p className="text-[11px] text-muted-foreground">Get quick access like a native app</p>
+                    <p className="text-sm font-semibold text-foreground leading-tight">
+                      Install App
+                    </p>
+                    <p className="text-[11px] text-muted-foreground">
+                      Add to home screen for quick access
+                    </p>
                   </div>
                 </div>
-                <div className="space-y-2 ml-1">
-                  <div className="flex items-center gap-2.5 text-xs text-muted-foreground">
-                    <span className="w-5 h-5 rounded-full bg-primary/10 text-primary text-[10px] font-bold flex items-center justify-center shrink-0">1</span>
+                <div className="space-y-1.5 ml-0.5">
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <span className="w-5 h-5 rounded-full bg-primary/10 text-primary text-[10px] font-bold flex items-center justify-center shrink-0">
+                      1
+                    </span>
                     <span>
-                      Tap the <FontAwesomeIcon icon={faArrowUpFromBracket} className="w-3 h-3 text-primary mx-0.5 inline" /> Share button below
+                      Tap{' '}
+                      <FontAwesomeIcon
+                        icon={faArrowUpFromBracket}
+                        className="w-3 h-3 text-primary mx-0.5 inline"
+                      />{' '}
+                      Share
                     </span>
                   </div>
-                  <div className="flex items-center gap-2.5 text-xs text-muted-foreground">
-                    <span className="w-5 h-5 rounded-full bg-primary/10 text-primary text-[10px] font-bold flex items-center justify-center shrink-0">2</span>
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <span className="w-5 h-5 rounded-full bg-primary/10 text-primary text-[10px] font-bold flex items-center justify-center shrink-0">
+                      2
+                    </span>
                     <span>
-                      Scroll down and tap <strong className="text-foreground">Add to Home Screen</strong> <FontAwesomeIcon icon={faPlus} className="w-2.5 h-2.5 text-primary mx-0.5 inline" />
+                      Tap{' '}
+                      <strong className="text-foreground">
+                        Add to Home Screen
+                      </strong>{' '}
+                      <FontAwesomeIcon
+                        icon={faPlus}
+                        className="w-2.5 h-2.5 text-primary mx-0.5 inline"
+                      />
                     </span>
                   </div>
                 </div>
               </div>
             ) : (
-              /* ─── Chrome / Edge Install ─── */
+              /* Chrome / Edge */
               <div className="pr-6">
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
-                    <FontAwesomeIcon icon={faMobileScreenButton} className="w-5 h-5 text-primary" />
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                    <FontAwesomeIcon
+                      icon={faDownload}
+                      className="w-4 h-4 text-primary"
+                    />
                   </div>
-                  <div>
-                    <p className="text-sm font-semibold text-foreground">Install App</p>
-                    <p className="text-[11px] text-muted-foreground">Add to home screen for quick access</p>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-foreground leading-tight">
+                      Install App
+                    </p>
+                    <p className="text-[11px] text-muted-foreground">
+                      Get a native app experience — works offline
+                    </p>
                   </div>
-                </div>
-                <div className="flex gap-2 mt-1">
                   <Button
                     size="sm"
                     onClick={handleInstall}
-                    className="rounded-full text-xs px-4 h-8 font-semibold"
+                    className="rounded-full text-xs px-4 h-8 font-semibold shrink-0"
                   >
                     Install
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={handleDismiss}
-                    className="rounded-full text-xs px-4 h-8 text-muted-foreground"
-                  >
-                    Not now
                   </Button>
                 </div>
               </div>
             )}
-          </div>
-        </motion.div>
-      )}
+          </CardContent>
+        </Card>
+      </motion.div>
     </AnimatePresence>
   )
 }

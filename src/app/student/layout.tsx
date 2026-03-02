@@ -371,7 +371,7 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
 
         {/* Bottom Navigation — mobile only — center FAB QR */}
         <nav className="fixed bottom-0 left-0 right-0 z-30 bg-background/95 backdrop-blur-lg border-t pb-safe pt-3 px-4 transition-colors lg:hidden">
-          <div className="flex items-end justify-around max-w-lg mx-auto relative">
+          <div className="grid grid-cols-5 items-end max-w-lg mx-auto relative">
             {/* Left nav items */}
             {navItemsLeft.map((item) => {
               const active = pathname === item.href
@@ -381,7 +381,7 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
                   key={item.href}
                   type="button"
                   onClick={() => navigateTo(item.href)}
-                  className="flex flex-col items-center justify-center gap-1 active:scale-90 transition-transform duration-100 bg-transparent border-none outline-none cursor-pointer"
+                  className="flex flex-col items-center justify-self-center justify-center gap-1 active:scale-90 transition-transform duration-100 bg-transparent border-none outline-none cursor-pointer"
                 >
                   <span className={`transition-colors duration-150 ${active || isNavigating ? 'text-primary' : 'text-muted-foreground'}`}>
                     {isNavigating ? (
@@ -399,7 +399,7 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
             <button
               type="button"
               onClick={() => navigateTo('/student/scan')}
-              className="flex flex-col items-center -mt-5 active:scale-90 transition-transform duration-100 bg-transparent border-none outline-none cursor-pointer"
+              className="flex flex-col items-center justify-self-center -mt-5 active:scale-90 transition-transform duration-100 bg-transparent border-none outline-none cursor-pointer"
             >
               <span className={`w-14 h-14 rounded-full flex items-center justify-center shadow-lg border-4 border-background transition-colors bg-primary text-primary-foreground`}>
                 {navigatingTo === '/student/scan' ? (
@@ -424,7 +424,7 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
                   key={item.href}
                   type="button"
                   onClick={() => navigateTo(item.href)}
-                  className="flex flex-col items-center justify-center gap-1 active:scale-90 transition-transform duration-100 bg-transparent border-none outline-none cursor-pointer"
+                  className="flex flex-col items-center justify-self-center justify-center gap-1 active:scale-90 transition-transform duration-100 bg-transparent border-none outline-none cursor-pointer"
                 >
                   <span className={`transition-colors duration-150 ${active || isNavigating ? 'text-primary' : 'text-muted-foreground'}`}>
                     {isNavigating ? (

@@ -21,20 +21,11 @@ export const metadata: Metadata = {
     description: 'Rate your hostel meals and help the management improve food quality.',
     siteName: 'Hostel Food Review',
     locale: 'en_IN',
-    images: [
-      {
-        url: '/og-image.png',
-        width: 1200,
-        height: 630,
-        alt: 'Hostel Food Review System',
-      },
-    ],
   },
   twitter: {
-    card: 'summary_large_image',
+    card: 'summary',
     title: 'Hostel Food Review System',
     description: 'Rate your hostel meals and help the management improve food quality.',
-    images: ['/og-image.png'],
   },
   icons: {
     icon: '/college-logo.png',

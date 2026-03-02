@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
+import dynamic from 'next/dynamic'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { faIdCard, faEnvelope, faBuilding, faGraduationCap, faCalendar, faStar, faPenToSquare, faCheck, faXmark, faKey, faEye, faEyeSlash } from '@fortawesome/free-solid-svg-icons'
 import { createClient } from '@/lib/supabase/client'
@@ -12,10 +13,12 @@ import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
 import { toast } from 'sonner'
 import { ThemeToggle } from '@/lib/theme'
-import { LanguageSwitcher } from '@/components/language-switcher'
-import { WhatsNew } from '@/components/whats-new'
 import { PullToRefresh } from '@/components/pull-to-refresh'
-import { ProfileInstallCard } from '@/components/add-to-homescreen'
+
+// Lazy-load below-the-fold components for faster initial render
+const LanguageSwitcher = dynamic(() => import('@/components/language-switcher').then(m => ({ default: m.LanguageSwitcher })), { ssr: false })
+const WhatsNew = dynamic(() => import('@/components/whats-new').then(m => ({ default: m.WhatsNew })), { ssr: false })
+const ProfileInstallCard = dynamic(() => import('@/components/add-to-homescreen').then(m => ({ default: m.ProfileInstallCard })), { ssr: false })
 
 interface User {
   id: string

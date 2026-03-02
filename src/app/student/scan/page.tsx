@@ -2,14 +2,24 @@
 
 import { useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
+import dynamic from 'next/dynamic'
 import { motion, AnimatePresence } from 'framer-motion'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { faQrcode, faCamera, faArrowLeft, faUpRightFromSquare } from '@fortawesome/free-solid-svg-icons'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { BlurFade } from '@/components/ui/blur-fade'
-import QRScanner from '@/components/qr-scanner'
 import { hapticSuccess, hapticError } from '@/lib/haptics'
+
+// Lazy-load QR scanner (includes jsQR ~50KB) — only needed when user taps "Open Scanner"
+const QRScanner = dynamic(() => import('@/components/qr-scanner'), {
+  ssr: false,
+  loading: () => (
+    <div className="flex items-center justify-center h-64 bg-muted/30 rounded-2xl">
+      <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+    </div>
+  ),
+})
 
 type ScanPageState = 'intro' | 'scanning' | 'processing' | 'invalid'
 

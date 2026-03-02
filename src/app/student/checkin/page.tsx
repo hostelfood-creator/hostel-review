@@ -56,13 +56,15 @@ export default function CheckinPage() {
   const [currentTime, setCurrentTime] = useState('')
   const [mealWindows, setMealWindows] = useState<Record<string, string> | null>(null)
 
-  // Generate particles for celebration effect
-  const particles = Array.from({ length: 16 }, (_, i) => ({
-    id: i,
-    delay: Math.random() * 0.5,
-    x: (Math.random() - 0.5) * 200,
-    y: (Math.random() - 0.5) * 200,
-  }))
+  // Generate particles for celebration effect (memoized to avoid re-creating on every render)
+  const [particles] = useState(() =>
+    Array.from({ length: 16 }, (_, i) => ({
+      id: i,
+      delay: Math.random() * 0.5,
+      x: (Math.random() - 0.5) * 200,
+      y: (Math.random() - 0.5) * 200,
+    }))
+  )
 
   const performCheckin = useCallback(async () => {
     setState('checking-in')

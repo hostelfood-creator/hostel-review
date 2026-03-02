@@ -1,10 +1,9 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useTransition, useCallback } from 'react'
 import Image from 'next/image'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter, usePathname } from 'next/navigation'
-import Link from 'next/link'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { faUtensils, faClock, faUserCircle, faBell, faRightFromBracket, faCommentDots, faQrcode } from '@fortawesome/free-solid-svg-icons'
 import { ThemeToggle } from '@/lib/theme'
@@ -46,6 +45,31 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
   const [unreadCount, setUnreadCount] = useState(0)
   const [showNotifications, setShowNotifications] = useState(false)
   const { t } = useTranslation()
+  const [isPending, startTransition] = useTransition()
+  const [navigatingTo, setNavigatingTo] = useState<string | null>(null)
+
+  /** Navigate with React transition — gives instant visual feedback */
+  const navigateTo = useCallback((href: string) => {
+    if (href === pathname) return
+    hapticTap()
+    setNavigatingTo(href)
+    startTransition(() => {
+      router.push(href)
+    })
+  }, [pathname, router])
+
+  // Clear navigating state when route change completes
+  useEffect(() => {
+    setNavigatingTo(null)
+  }, [pathname])
+
+  // Prefetch all student routes on mount for instant navigation
+  useEffect(() => {
+    const routes = ['/student', '/student/scan', '/student/history', '/student/complaints', '/student/profile']
+    routes.forEach((route) => {
+      if (route !== pathname) router.prefetch(route)
+    })
+  }, [router, pathname])
 
   // Read IDs from localStorage (fallback for offline)
   const getReadIds = (): string[] => {
@@ -203,17 +227,18 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
           {navItems.map((item) => {
             const active = pathname === item.href
             return (
-              <Link
+              <button
                 key={item.href}
-                href={item.href}
-                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${active
+                type="button"
+                onClick={() => navigateTo(item.href)}
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors text-left ${active
                   ? 'bg-primary/10 text-primary'
                   : 'text-muted-foreground hover:text-foreground hover:bg-accent'
                   }`}
               >
                 {item.icon}
                 {item.label}
-              </Link>
+              </button>
             )
           })}
         </nav>
@@ -333,7 +358,13 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
 
         {/* Content */}
         <main className="flex-1 overflow-y-auto no-scrollbar pb-24 lg:pb-8">
-          <div className="max-w-4xl mx-auto">
+          {/* Top loading bar for page transitions */}
+          {(isPending || navigatingTo) && (
+            <div className="fixed top-0 left-0 right-0 z-50 h-0.5">
+              <div className="h-full bg-primary rounded-r-full" style={{ animation: 'nav-progress 1.5s ease-in-out infinite' }} />
+            </div>
+          )}
+          <div className={`max-w-4xl mx-auto transition-opacity duration-150 ${isPending ? 'opacity-60 pointer-events-none' : 'opacity-100'}`}>
             {children}
           </div>
         </main>
@@ -344,60 +375,66 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
             {/* Left nav items */}
             {navItemsLeft.map((item) => {
               const active = pathname === item.href
+              const isNavigating = navigatingTo === item.href
               return (
-                <Link
+                <button
                   key={item.href}
-                  href={item.href}
-                  onClick={() => hapticTap()}
-                  className="flex flex-col items-center justify-center gap-1 active:scale-90 transition-transform duration-100"
+                  type="button"
+                  onClick={() => navigateTo(item.href)}
+                  className="flex flex-col items-center justify-center gap-1 active:scale-90 transition-transform duration-100 bg-transparent border-none outline-none cursor-pointer"
                 >
-                  <span className={`transition-colors ${active ? 'text-primary' : 'text-muted-foreground'}`}>
-                    {item.icon}
+                  <span className={`transition-colors duration-150 ${active || isNavigating ? 'text-primary' : 'text-muted-foreground'}`}>
+                    {isNavigating ? (
+                      <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                    ) : item.icon}
                   </span>
-                  <span className={`text-[10px] font-semibold uppercase tracking-widest transition-colors ${active ? 'text-primary' : 'text-muted-foreground'}`}>
+                  <span className={`text-[10px] font-semibold uppercase tracking-widest transition-colors duration-150 ${active || isNavigating ? 'text-primary' : 'text-muted-foreground'}`}>
                     {item.label}
                   </span>
-                </Link>
+                </button>
               )
             })}
 
             {/* Center FAB — QR Scan */}
-            <Link
-              href="/student/scan"
-              onClick={() => hapticTap()}
-              className="flex flex-col items-center -mt-5 active:scale-90 transition-transform duration-100"
+            <button
+              type="button"
+              onClick={() => navigateTo('/student/scan')}
+              className="flex flex-col items-center -mt-5 active:scale-90 transition-transform duration-100 bg-transparent border-none outline-none cursor-pointer"
             >
-              <span className={`w-14 h-14 rounded-full flex items-center justify-center shadow-lg border-4 border-background transition-colors ${
-                pathname === '/student/scan'
-                  ? 'bg-primary text-primary-foreground'
-                  : 'bg-primary text-primary-foreground'
-              }`}>
-                <FontAwesomeIcon icon={faQrcode} className="w-6 h-6" />
+              <span className={`w-14 h-14 rounded-full flex items-center justify-center shadow-lg border-4 border-background transition-colors bg-primary text-primary-foreground`}>
+                {navigatingTo === '/student/scan' ? (
+                  <div className="w-6 h-6 border-2 border-primary-foreground border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <FontAwesomeIcon icon={faQrcode} className="w-6 h-6" />
+                )}
               </span>
-              <span className={`text-[10px] font-semibold uppercase tracking-widest mt-1 transition-colors ${
-                pathname === '/student/scan' ? 'text-primary' : 'text-muted-foreground'
+              <span className={`text-[10px] font-semibold uppercase tracking-widest mt-1 transition-colors duration-150 ${
+                pathname === '/student/scan' || navigatingTo === '/student/scan' ? 'text-primary' : 'text-muted-foreground'
               }`}>
                 {t.nav.checkin}
               </span>
-            </Link>
+            </button>
 
             {/* Right nav items */}
             {navItemsRight.map((item) => {
               const active = pathname === item.href
+              const isNavigating = navigatingTo === item.href
               return (
-                <Link
+                <button
                   key={item.href}
-                  href={item.href}
-                  onClick={() => hapticTap()}
-                  className="flex flex-col items-center justify-center gap-1 active:scale-90 transition-transform duration-100"
+                  type="button"
+                  onClick={() => navigateTo(item.href)}
+                  className="flex flex-col items-center justify-center gap-1 active:scale-90 transition-transform duration-100 bg-transparent border-none outline-none cursor-pointer"
                 >
-                  <span className={`transition-colors ${active ? 'text-primary' : 'text-muted-foreground'}`}>
-                    {item.icon}
+                  <span className={`transition-colors duration-150 ${active || isNavigating ? 'text-primary' : 'text-muted-foreground'}`}>
+                    {isNavigating ? (
+                      <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                    ) : item.icon}
                   </span>
-                  <span className={`text-[10px] font-semibold uppercase tracking-widest transition-colors ${active ? 'text-primary' : 'text-muted-foreground'}`}>
+                  <span className={`text-[10px] font-semibold uppercase tracking-widest transition-colors duration-150 ${active || isNavigating ? 'text-primary' : 'text-muted-foreground'}`}>
                     {item.label}
                   </span>
-                </Link>
+                </button>
               )
             })}
           </div>

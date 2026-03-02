@@ -45,6 +45,12 @@
     "tailwind-merge": "^3.5.0",
     "tailwindcss-animate": "^1.0.7"
   },
+  "overrides": {
+    "unzipper": "^0.12.3",
+    "archiver-utils": "^5.0.2",
+    "@fast-csv/format": "^5.0.5",
+    "@fast-csv/parse": "^5.0.5"
+  },
   "devDependencies": {
     "@types/node": "^20.11.0",
     "@types/nodemailer": "^7.0.11",

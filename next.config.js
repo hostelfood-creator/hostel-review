@@ -3,7 +3,7 @@
 const isProd = process.env.NODE_ENV === 'production'
 
 const nextConfig = {
-    serverExternalPackages: ['xlsx'],
+    serverExternalPackages: ['exceljs'],
     async headers() {
         /** @type {Array<{key: string, value: string}>} */
         const securityHeaders = [

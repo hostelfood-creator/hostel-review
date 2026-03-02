@@ -4,6 +4,9 @@ import { createServiceClient } from '@/lib/supabase/service'
 import { checkRateLimit, getClientIp, rateLimitResponse } from '@/lib/rate-limit'
 import { getISTDate } from '@/lib/time'
 
+// Never cache per-user scoped responses at edge
+export const dynamic = 'force-dynamic'
+
 /**
  * GET /api/reviews/community — Public aggregated meal ratings for today
  *
@@ -68,11 +71,13 @@ export async function GET(request: Request) {
       }
     }
 
-    return NextResponse.json({
+    const res = NextResponse.json({
       date: today,
       hostelBlock: profile?.hostel_block || null,
       ratings,
     })
+    res.headers.set('Cache-Control', 'private, no-cache, no-store, must-revalidate')
+    return res
   } catch (error) {
     console.error('[CommunityRatings] Error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

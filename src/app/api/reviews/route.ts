@@ -6,6 +6,17 @@ import { getTodayDate, analyzeSentiment } from '@/lib/utils'
 import { checkRateLimit, getClientIp, rateLimitResponse } from '@/lib/rate-limit'
 import { getISTDateTime, DEFAULT_MEAL_TIMINGS, formatTime } from '@/lib/time'
 
+// CRITICAL: Force dynamic rendering — never cache per-user review data at the edge
+export const dynamic = 'force-dynamic'
+
+/** Private JSON response — never cached by CDN/edge/browser */
+function privateJson(body: unknown, init?: { status?: number }) {
+  const res = NextResponse.json(body, init)
+  res.headers.set('Cache-Control', 'private, no-cache, no-store, must-revalidate')
+  res.headers.set('Pragma', 'no-cache')
+  return res
+}
+
 /** Fetch admin-configured meal timings, fallback to defaults */
 async function getMealTimings(): Promise<Record<string, { start: string; end: string; label: string }>> {
   try {
@@ -51,7 +62,7 @@ export async function GET(request: Request) {
     if (!profile) {
       const filters = { userId: user.id, limit: 50, offset: 0, callerRole: 'student' as const, callerId: user.id }
       const { data: reviews, total } = await getReviews(filters)
-      return NextResponse.json({ reviews, userRole: 'student', userBlock: null, hostelBlocks: [], pagination: { page: 1, pageSize: 50, total, totalPages: Math.ceil(total / 50) } })
+      return privateJson({ reviews, userRole: 'student', userBlock: null, hostelBlocks: [], pagination: { page: 1, pageSize: 50, total, totalPages: Math.ceil(total / 50) } })
     }
 
     const { searchParams } = new URL(request.url)
@@ -90,7 +101,7 @@ export async function GET(request: Request) {
     const { data: reviews, total } = await getReviews(filters)
     const hostelBlocks = profile?.role === 'super_admin' ? await getStudentHostelBlocks() : []
 
-    return NextResponse.json({
+    return privateJson({
       reviews,
       userRole: profile?.role,
       userBlock: profile?.hostel_block,
@@ -104,7 +115,7 @@ export async function GET(request: Request) {
     })
   } catch (error) {
     console.error('Reviews GET error:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return privateJson({ error: 'Internal server error' }, { status: 500 })
   }
 }
 

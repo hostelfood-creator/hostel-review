@@ -69,7 +69,7 @@ export default function HistoryPage() {
   const loadData = useCallback(async (pageNum: number, append = false) => {
     try {
       if (append) setLoadingMore(true)
-      const res = await fetch(`/api/reviews?page=${pageNum}&pageSize=${PAGE_SIZE}`)
+      const res = await fetch(`/api/reviews?page=${pageNum}&pageSize=${PAGE_SIZE}`, { cache: 'no-store' })
       const data = await res.json()
       const newReviews = data.reviews || []
       if (append) {

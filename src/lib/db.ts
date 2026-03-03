@@ -448,6 +448,10 @@ export async function createMealCheckin(data: {
   if (error) {
     // Unique constraint violation → already checked in
     if (error.code === '23505') return { alreadyCheckedIn: true, id: null }
+    // Table doesn't exist — migration not run
+    if (error.message?.includes('does not exist') || error.code === '42P01') {
+      throw new Error('Meal check-in table not set up. Please run the meal_checkins migration.')
+    }
     throw new Error(error.message)
   }
   return { alreadyCheckedIn: false, id: inserted.id }

@@ -67,10 +67,18 @@ export default function AdminAttendancePage() {
       try {
         const res = await fetch('/api/admin/checkin')
         const data = await res.json()
-        setAttendance(data.counts || null)
+        if (!res.ok) {
+          console.error('Attendance API error:', data.error)
+          toast.error(data.error || 'Failed to load attendance data')
+          setAttendance({ breakfast: 0, lunch: 0, snacks: 0, dinner: 0, total: 0, byBlock: {} })
+        } else {
+          setAttendance(data.counts || { breakfast: 0, lunch: 0, snacks: 0, dinner: 0, total: 0, byBlock: {} })
+        }
         setUserRole(data.userRole || '')
       } catch {
         console.error('Failed to load attendance')
+        toast.error('Network error — could not load attendance')
+        setAttendance({ breakfast: 0, lunch: 0, snacks: 0, dinner: 0, total: 0, byBlock: {} })
       } finally {
         setLoading(false)
       }

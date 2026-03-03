@@ -38,6 +38,20 @@ export async function GET(request: Request) {
 
     if (error) {
       console.error('Checkin history error:', error)
+      // If table doesn't exist, return empty history gracefully
+      if (error.message?.includes('does not exist') || error.code === '42P01') {
+        const history: { date: string; meals: string[] }[] = []
+        const cursor = new Date(y, m - 1, d)
+        for (let i = 0; i < days; i++) {
+          const dateStr = `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, '0')}-${String(cursor.getDate()).padStart(2, '0')}`
+          history.push({ date: dateStr, meals: [] })
+          cursor.setDate(cursor.getDate() - 1)
+        }
+        return NextResponse.json({
+          history,
+          summary: { totalMeals: 0, totalPossible: days * 4, percentage: 0, days },
+        })
+      }
       return NextResponse.json({ error: 'Failed to fetch history' }, { status: 500 })
     }
 

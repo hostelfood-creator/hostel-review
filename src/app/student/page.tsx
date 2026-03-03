@@ -183,7 +183,13 @@ export default function StudentDashboard() {
 
     // Fetch today's check-in status
     fetch('/api/checkin')
-      .then(r => r.json())
+      .then(r => {
+        if (!r.ok) {
+          console.warn('[Checkin] API returned', r.status)
+          return { checkins: null, currentMeal: null }
+        }
+        return r.json()
+      })
       .then(d => {
         if (d.checkins && d.currentMeal) {
           const current = d.checkins.find((c: { meal_type: string }) => c.meal_type === d.currentMeal)
@@ -196,16 +202,25 @@ export default function StudentDashboard() {
           setCheckinStatus({ checkedIn: false })
         }
       })
-      .catch(() => setCheckinStatus({ checkedIn: false }))
+      .catch((err) => {
+        console.error('[Checkin] Fetch error:', err)
+        setCheckinStatus({ checkedIn: false })
+      })
 
     // Fetch weekly check-in history
     fetch('/api/checkin/history?days=7')
-      .then(r => r.json())
+      .then(r => {
+        if (!r.ok) {
+          console.warn('[Checkin History] API returned', r.status)
+          return { history: [], summary: null }
+        }
+        return r.json()
+      })
       .then(d => {
         if (d.history) setWeeklyHistory(d.history)
         if (d.summary) setWeeklyPercentage(d.summary.percentage)
       })
-      .catch(() => {})
+      .catch((err) => console.error('[Checkin History] Fetch error:', err))
 
     // Fetch admin-configured meal timings (public endpoint)
     fetch('/api/meal-timings')

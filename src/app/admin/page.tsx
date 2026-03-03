@@ -156,9 +156,11 @@ export default function AdminDashboard() {
         const aParams = new URLSearchParams({ hostelBlock: blockFilter })
         const aRes = await fetch(`/api/admin/checkin?${aParams}`)
         const aJson = await aRes.json()
-        setAttendance(aJson.counts || null)
+        setAttendance(aJson.counts || { breakfast: 0, lunch: 0, snacks: 0, dinner: 0, total: 0, byBlock: {} })
       } catch {
         console.error('Failed to load attendance')
+        // Fallback to zeros instead of leaving permanent skeletons
+        setAttendance({ breakfast: 0, lunch: 0, snacks: 0, dinner: 0, total: 0, byBlock: {} })
       } finally {
         setAttendanceLoading(false)
       }

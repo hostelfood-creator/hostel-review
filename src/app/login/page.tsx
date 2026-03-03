@@ -43,6 +43,9 @@ export default function LoginPage() {
   const turnstileRef = useRef<TurnstileRef>(null)
   const hcaptchaRef = useRef<HCaptchaRef>(null)
   const lookupTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Ref to avoid stale closure when waiting for Turnstile inside async handlers
+  const turnstileTokenRef = useRef<string | null>(null)
+  useEffect(() => { turnstileTokenRef.current = turnstileToken }, [turnstileToken])
 
   const [form, setForm] = useState({
     registerId: '',
@@ -182,13 +185,29 @@ export default function LoginPage() {
       setFieldErrors({ forgotEmail: 'Enter your @kanchiuniv.ac.in college email' })
       return
     }
-    if (!turnstileToken && !turnstileFailed) {
-      toast.error('Bot verification loading — please wait a moment and try again.')
-      return
-    }
     if (!turnstileToken && turnstileFailed) {
       toast.error('Please complete the captcha verification below.')
       return
+    }
+    // If Turnstile is still loading, wait briefly instead of showing an error
+    if (!turnstileToken && !turnstileFailed) {
+      setLoading(true)
+      // Wait up to 4 seconds for Turnstile to resolve (use ref to avoid stale closure)
+      const waited = await new Promise<boolean>((resolve) => {
+        let elapsed = 0
+        const interval = setInterval(() => {
+          elapsed += 200
+          if (turnstileTokenRef.current || elapsed >= 4000) {
+            clearInterval(interval)
+            resolve(!!turnstileTokenRef.current)
+          }
+        }, 200)
+      })
+      if (!waited && !turnstileTokenRef.current) {
+        setLoading(false)
+        toast.error('Bot verification is still loading. Please try again in a moment.')
+        return
+      }
     }
     setLoading(true)
     setError('')
@@ -268,13 +287,28 @@ export default function LoginPage() {
 
     if (!validate()) return
 
-    if (!turnstileToken && !turnstileFailed) {
-      toast.error('Bot verification loading — please wait a moment and try again.')
-      return
-    }
     if (!turnstileToken && turnstileFailed) {
       toast.error('Please complete the captcha verification below.')
       return
+    }
+    // If Turnstile is still loading, wait briefly instead of showing an error
+    if (!turnstileToken && !turnstileFailed) {
+      setLoading(true)
+      const waited = await new Promise<boolean>((resolve) => {
+        let elapsed = 0
+        const interval = setInterval(() => {
+          elapsed += 200
+          if (turnstileTokenRef.current || elapsed >= 4000) {
+            clearInterval(interval)
+            resolve(!!turnstileTokenRef.current)
+          }
+        }, 200)
+      })
+      if (!waited && !turnstileTokenRef.current) {
+        setLoading(false)
+        toast.error('Bot verification is still loading. Please try again in a moment.')
+        return
+      }
     }
 
     setLoading(true)

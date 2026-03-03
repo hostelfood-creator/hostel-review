@@ -7,6 +7,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
+import { Skeleton } from '@/components/ui/skeleton'
 import { BlurFade } from '@/components/ui/blur-fade'
 import { Label } from '@/components/ui/label'
 import { Slider } from '@/components/ui/slider'
@@ -143,6 +144,8 @@ export default function StudentDashboard() {
   const [reviewSuccess, setReviewSuccess] = useState<{ show: boolean; rating: number; meal: string }>({ show: false, rating: 0, meal: '' })
   // Community ratings
   const [communityRatings, setCommunityRatings] = useState<Record<string, { avg: number; count: number }>>({})
+  // Track whether initial review data has loaded (prevents flash of unsubmitted cards)
+  const [dataLoaded, setDataLoaded] = useState(false)
   // Announcements
   const [announcements, setAnnouncements] = useState<{ id: string; title: string; body: string; priority: string }[]>([])
 
@@ -314,10 +317,12 @@ export default function StudentDashboard() {
           }
         }
         setReviews(state)
+        setDataLoaded(true)
       } catch (err) {
         console.error('Failed to load data:', err)
         toast.error('Failed to load menu data')
         setReviews(initReviewState())
+        setDataLoaded(true)
       }
     }
     loadData()
@@ -625,7 +630,7 @@ export default function StudentDashboard() {
           const items = menu?.items || DEFAULT_ITEMS_I18N[mealType]
           const mealTiming = mealTimings?.[mealType]
           const timing = mealTiming?.display || menu?.timing || ''
-          const isSubmitted = review?.submitted
+          const isSubmitted = dataLoaded ? review?.submitted : undefined // undefined = still loading
           const isOpen = isMealOpen(mealTiming, serverHour, serverMinute)
 
           return (
@@ -638,7 +643,7 @@ export default function StudentDashboard() {
                     : 'hover:border-primary/30 dark:hover:border-primary/20 hover:shadow-md'
                   }`}
                 onClick={() => {
-                  if (isOpen && !isSubmitted) {
+                  if (isOpen && !isSubmitted && dataLoaded) {
                     hapticLight()
                     setActiveSheet(mealType)
                   }
@@ -684,7 +689,9 @@ export default function StudentDashboard() {
                     </div>
 
                     {/* Right side badge/action */}
-                    {isSubmitted ? (
+                    {!dataLoaded ? (
+                      <Skeleton className="w-20 h-5 rounded-full" />
+                    ) : isSubmitted ? (
                       <div className="flex items-center gap-1.5 shrink-0">
                         <div className="flex gap-0.5">
                           {[1, 2, 3, 4, 5].map((star) => (

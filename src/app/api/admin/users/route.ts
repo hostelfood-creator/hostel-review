@@ -37,36 +37,56 @@ export async function GET(request: Request) {
     const offset = (page - 1) * pageSize
 
     const serviceDb = createServiceClient()
-    let query = serviceDb
-      .from('profiles')
-      .select('id, register_id, name, email, role, hostel_block, department, year, created_at, deactivated', { count: 'exact' })
-      .order('created_at', { ascending: false })
-      .range(offset, offset + pageSize - 1)
 
+    // Helper to build and execute the profiles query.
+    // The `deactivated` column is added by migration and may not exist yet;
+    // if the query fails we retry without it so the page still loads.
+    async function fetchProfiles(includeDeactivated: boolean) {
+      const cols = includeDeactivated
+        ? 'id, register_id, name, email, role, hostel_block, department, year, created_at, deactivated'
+        : 'id, register_id, name, email, role, hostel_block, department, year, created_at'
+      let q = serviceDb
+        .from('profiles')
+        .select(cols, { count: 'exact' })
+        .order('created_at', { ascending: false })
+        .range(offset, offset + pageSize - 1)
 
-    // Admin can only see users in their block
-    if (profile.role === 'admin' && profile.hostel_block) {
-      query = query.eq('hostel_block', profile.hostel_block)
-    }
-
-    if (search) {
-      // Sanitize search to prevent PostgREST filter injection — strip metacharacters and SQL wildcards
-      const safeSearch = search.replace(/[,.()'"\\\/_%]/g, '')
-      if (safeSearch.length > 0) {
-        query = query.or(`name.ilike.%${safeSearch}%,register_id.ilike.%${safeSearch}%,email.ilike.%${safeSearch}%`)
+      // Admin can only see users in their block
+      if (profile.role === 'admin' && profile.hostel_block) {
+        q = q.eq('hostel_block', profile.hostel_block)
       }
-    }
-    if (roleFilter) query = query.eq('role', roleFilter)
-    if (blockFilter) query = query.eq('hostel_block', blockFilter)
-    if (yearFilter) query = query.eq('year', yearFilter)
-    if (statusFilter === 'deactivated') query = query.eq('deactivated', true)
-    if (statusFilter === 'active') query = query.or('deactivated.is.null,deactivated.eq.false')
 
-    const { data, count, error } = await query
+      if (search) {
+        const safeSearch = search.replace(/[,.()'"\\\/_%]/g, '')
+        if (safeSearch.length > 0) {
+          q = q.or(`name.ilike.%${safeSearch}%,register_id.ilike.%${safeSearch}%,email.ilike.%${safeSearch}%`)
+        }
+      }
+      if (roleFilter) q = q.eq('role', roleFilter)
+      if (blockFilter) q = q.eq('hostel_block', blockFilter)
+      // NOTE: yearFilter is applied post-query after student_records enrichment
+      if (includeDeactivated) {
+        if (statusFilter === 'deactivated') q = q.eq('deactivated', true)
+        if (statusFilter === 'active') q = q.or('deactivated.is.null,deactivated.eq.false')
+      }
+
+      return q
+    }
+
+    let { data, count, error } = await fetchProfiles(true)
+
+    // Retry without `deactivated` column if it doesn't exist yet (migration not run)
+    if (error) {
+      console.warn('User management: retrying without deactivated column —', error.message)
+      const retry = await fetchProfiles(false)
+      data = retry.data
+      count = retry.count
+      error = retry.error
+    }
 
     if (error) {
       console.error('User management fetch error:', error)
-      return NextResponse.json({ error: 'Failed to fetch users' }, { status: 500 })
+      return NextResponse.json({ error: `Failed to fetch users: ${error.message}` }, { status: 500 })
     }
 
     // Enrich profiles with data from student_records for missing department/year
@@ -105,9 +125,16 @@ export async function GET(request: Request) {
       }
     }
 
+    // Apply year filter post-enrichment (year often lives in student_records, not profiles)
+    if (yearFilter) {
+      enrichedUsers = enrichedUsers.filter(
+        (u) => u.year && u.year.toUpperCase() === yearFilter.toUpperCase()
+      )
+    }
+
     return NextResponse.json({
       users: enrichedUsers,
-      total: count || 0,
+      total: yearFilter ? enrichedUsers.length : (count || 0),
       page,
       pageSize,
     })

@@ -64,10 +64,18 @@ export default function UserManagementPage() {
 
       const res = await fetch(`/api/admin/users?${params}`)
       const data = await res.json()
+      if (!res.ok) {
+        console.error('Admin users API error:', res.status, data)
+        toast.error(data.error || `Failed to load users (${res.status})`)
+        setUsers([])
+        setTotal(0)
+        return
+      }
       setUsers(data.users || [])
       setTotal(data.total || 0)
-    } catch {
-      toast.error('Failed to load users')
+    } catch (err) {
+      console.error('Failed to load users:', err)
+      toast.error('Failed to load users — network error')
     } finally {
       setLoading(false)
     }

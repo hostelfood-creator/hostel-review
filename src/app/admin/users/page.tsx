@@ -19,6 +19,7 @@ interface UserRecord {
   hostel_block: string | null
   department: string | null
   year: string | null
+  room_no: string | null
   created_at: string
   deactivated: boolean | null
 }
@@ -267,6 +268,7 @@ export default function UserManagementPage() {
                       {u.hostel_block && <span>{u.hostel_block} · </span>}
                       {u.department && <span>{u.department} · </span>}
                       {u.year && <span>Year {u.year} · </span>}
+                      {u.room_no && <span>Room {u.room_no} · </span>}
                       Joined {new Date(u.created_at).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', year: 'numeric' })}
                     </p>
                   </div>

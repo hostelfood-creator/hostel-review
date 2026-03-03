@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { faStar, faMessage, faPenToSquare, faTrash, faCheck, faXmark, faReply } from '@fortawesome/free-solid-svg-icons'
+import { faStar, faMessage, faPenToSquare, faCheck, faXmark, faReply } from '@fortawesome/free-solid-svg-icons'
 import { createClient } from '@/lib/supabase/client'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -45,26 +45,26 @@ export default function HistoryPage() {
   const [editRating, setEditRating] = useState(0)
   const [editText, setEditText] = useState('')
   const [saving, setSaving] = useState(false)
-  const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [serverDate, setServerDate] = useState<string | null>(null)
 
-  /** Get today's date in IST */
-  const getTodayIST = () => {
-    const now = new Date()
-    const formatter = new Intl.DateTimeFormat('en-US', {
-      timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit',
-    })
-    const parts = Object.fromEntries(formatter.formatToParts(now).map(p => [p.type, p.value]))
-    return `${parts.year}-${parts.month}-${parts.day}`
-  }
+  /** Fetch server date on mount for accurate IST comparison */
+  useEffect(() => {
+    fetch('/api/time')
+      .then(r => r.json())
+      .then(d => { if (d.date) setServerDate(d.date) })
+      .catch(() => {
+        // Fallback: use client IST
+        const now = new Date()
+        const formatter = new Intl.DateTimeFormat('en-US', {
+          timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit',
+        })
+        const parts = Object.fromEntries(formatter.formatToParts(now).map(p => [p.type, p.value]))
+        setServerDate(`${parts.year}-${parts.month}-${parts.day}`)
+      })
+  }, [])
 
-  /** Check if a review can be edited (same day IST) */
-  const canEdit = (review: Review) => review.date === getTodayIST()
-
-  /** Check if a review can be deleted (within 24 hours) */
-  const canDelete = (review: Review) => {
-    const createdAt = new Date(review.createdAt).getTime()
-    return (Date.now() - createdAt) < 24 * 60 * 60 * 1000
-  }
+  /** Check if a review can be edited (same day IST, using server time) */
+  const canEdit = (review: Review) => serverDate ? review.date === serverDate : false
 
   const loadData = useCallback(async (pageNum: number, append = false) => {
     try {
@@ -147,17 +147,6 @@ export default function HistoryPage() {
       setPage(1)
       loadData(1)
     } catch { toast.error('Network error') } finally { setSaving(false) }
-  }
-
-  const handleDelete = async (reviewId: string) => {
-    setDeletingId(reviewId)
-    try {
-      const res = await fetch(`/api/reviews?id=${reviewId}`, { method: 'DELETE' })
-      const data = await res.json()
-      if (!res.ok) { toast.error(data.error || 'Failed to delete'); return }
-      toast.success('Review deleted')
-      setReviews(prev => prev.filter(r => r.id !== reviewId))
-    } catch { toast.error('Network error') } finally { setDeletingId(null) }
   }
 
   const groupedByDate = reviews.reduce<Record<string, Review[]>>((acc, r) => {
@@ -294,28 +283,16 @@ export default function HistoryPage() {
                                     />
                                   ))}
                                 </div>
-                                {/* Edit/Delete actions */}
-                                {(canEdit(review) || canDelete(review)) && (
+                                {/* Edit action — delete is intentionally removed post-submission */}
+                                {canEdit(review) && (
                                   <div className="flex items-center gap-1 ml-1">
-                                    {canEdit(review) && (
-                                      <button
-                                        onClick={() => startEdit(review)}
-                                        className="p-1 rounded text-muted-foreground hover:text-primary transition-colors"
-                                        title="Edit review"
-                                      >
-                                        <FontAwesomeIcon icon={faPenToSquare} className="w-3 h-3" />
-                                      </button>
-                                    )}
-                                    {canDelete(review) && (
-                                      <button
-                                        onClick={() => handleDelete(review.id)}
-                                        disabled={deletingId === review.id}
-                                        className="p-1 rounded text-muted-foreground hover:text-red-500 transition-colors"
-                                        title="Delete review"
-                                      >
-                                        <FontAwesomeIcon icon={faTrash} className={`w-3 h-3 ${deletingId === review.id ? 'animate-spin' : ''}`} />
-                                      </button>
-                                    )}
+                                    <button
+                                      onClick={() => startEdit(review)}
+                                      className="p-1 rounded text-muted-foreground hover:text-primary transition-colors"
+                                      title="Edit review"
+                                    >
+                                      <FontAwesomeIcon icon={faPenToSquare} className="w-3 h-3" />
+                                    </button>
                                   </div>
                                 )}
                               </div>

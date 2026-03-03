@@ -262,11 +262,16 @@ export default function StudentDashboard() {
         setServerMinute(isNaN(istM) ? new Date().getMinutes() : istM)
       }
     } catch {
-      // Fallback to client time
+      // Fallback to client time — use IST via Intl API (not UTC)
       const now = new Date()
-      setTodayDate(now.toISOString().split('T')[0])
-      setServerHour(now.getHours())
-      setServerMinute(now.getMinutes())
+      const formatter = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit', hour12: false,
+      })
+      const parts = Object.fromEntries(formatter.formatToParts(now).map(p => [p.type, p.value]))
+      setTodayDate(`${parts.year}-${parts.month}-${parts.day}`)
+      setServerHour(parseInt(parts.hour!, 10))
+      setServerMinute(parseInt(parts.minute!, 10))
     }
   }, [])
 

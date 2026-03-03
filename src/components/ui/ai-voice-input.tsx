@@ -53,28 +53,65 @@ export function AIVoiceInput({
     }
   }, []);
 
+  const listeningRef = useRef(false);
+  const onStartRef = useRef(onStart);
+  const onStopRef = useRef(onStop);
+  onStartRef.current = onStart;
+  onStopRef.current = onStop;
+
   useEffect(() => {
     let intervalId: NodeJS.Timeout;
 
     if (listening) {
-      onStart?.();
+      if (!listeningRef.current) {
+        listeningRef.current = true;
+        onStartRef.current?.();
+      }
       intervalId = setInterval(() => {
         setTime((t) => t + 1);
       }, 1000);
     } else {
-      onStop?.(time);
+      if (listeningRef.current) {
+        listeningRef.current = false;
+        onStopRef.current?.(time);
+      }
       setTime(0);
     }
 
     return () => clearInterval(intervalId);
-  }, [listening, time, onStart, onStop]);
+  }, [listening, time]);
 
-  /** Request microphone permission before starting recognition */
+  /** Check/request microphone permission — avoids double-prompting */
   const requestMicPermission = useCallback(async (): Promise<boolean> => {
     try {
-      // navigator.mediaDevices.getUserMedia triggers the browser permission prompt
+      // Check if mediaDevices API is available (requires HTTPS)
+      if (!navigator.mediaDevices?.getUserMedia) {
+        toast.error("Microphone not available. Make sure you're using HTTPS.");
+        setPermissionDenied(true);
+        return false;
+      }
+
+      // Check existing permission status first to avoid re-prompting
+      if (navigator.permissions?.query) {
+        try {
+          const permStatus = await navigator.permissions.query({ name: 'microphone' as PermissionName });
+          if (permStatus.state === 'granted') {
+            setPermissionDenied(false);
+            return true;
+          }
+          if (permStatus.state === 'denied') {
+            setPermissionDenied(true);
+            toast.error("Microphone blocked. Please enable it in your browser settings.");
+            return false;
+          }
+          // 'prompt' — fall through to getUserMedia below
+        } catch {
+          // permissions.query not supported for microphone — fall through
+        }
+      }
+
+      // Request permission via getUserMedia (only fires if not already granted)
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      // Immediately stop the tracks — we only needed the permission grant
       stream.getTracks().forEach((track) => track.stop());
       setPermissionDenied(false);
       return true;

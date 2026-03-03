@@ -43,14 +43,15 @@ export async function GET(request: Request) {
       .order('created_at', { ascending: false })
       .range(offset, offset + pageSize - 1)
 
+
     // Admin can only see users in their block
     if (profile.role === 'admin' && profile.hostel_block) {
       query = query.eq('hostel_block', profile.hostel_block)
     }
 
     if (search) {
-      // Sanitize search to prevent PostgREST filter injection — strip metacharacters
-      const safeSearch = search.replace(/[,.()'"\\]/g, '')
+      // Sanitize search to prevent PostgREST filter injection — strip metacharacters and SQL wildcards
+      const safeSearch = search.replace(/[,.()'"\\\/_%]/g, '')
       if (safeSearch.length > 0) {
         query = query.or(`name.ilike.%${safeSearch}%,register_id.ilike.%${safeSearch}%,email.ilike.%${safeSearch}%`)
       }
@@ -68,8 +69,44 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'Failed to fetch users' }, { status: 500 })
     }
 
+    // Enrich profiles with data from student_records for missing department/year
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let enrichedUsers: any[] = data || []
+    if (enrichedUsers.length > 0) {
+      const registerIds = enrichedUsers
+        .filter((u) => u.register_id)
+        .map((u) => (u.register_id as string).trim().toUpperCase())
+
+      if (registerIds.length > 0) {
+        const { data: studentRecords } = await serviceDb
+          .from('student_records')
+          .select('register_id, department, year, room_no')
+          .in('register_id', registerIds)
+
+        if (studentRecords && studentRecords.length > 0) {
+          const recordMap = new Map(studentRecords.map((sr: Record<string, unknown>) => [
+            (sr.register_id as string).toUpperCase(),
+            sr,
+          ]))
+
+          enrichedUsers = enrichedUsers.map((u) => {
+            const sr = recordMap.get(((u.register_id as string) || '').toUpperCase()) as Record<string, unknown> | undefined
+            if (sr) {
+              return {
+                ...u,
+                department: u.department || sr.department,
+                year: u.year || sr.year,
+                room_no: sr.room_no || null,
+              }
+            }
+            return u
+          })
+        }
+      }
+    }
+
     return NextResponse.json({
-      users: data || [],
+      users: enrichedUsers,
       total: count || 0,
       page,
       pageSize,

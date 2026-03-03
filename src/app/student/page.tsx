@@ -10,7 +10,7 @@ import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { BlurFade } from '@/components/ui/blur-fade'
 import { Label } from '@/components/ui/label'
-import { Slider } from '@/components/ui/slider'
+import { StarRating } from '@/components/ui/star-rating'
 import { BottomSheet } from '@/components/ui/bottom-sheet'
 import { ReviewSuccess } from '@/components/ui/review-success'
 import { AIVoiceInput } from '@/components/ui/ai-voice-input'
@@ -813,7 +813,7 @@ export default function StudentDashboard() {
                 <p className="text-sm text-foreground leading-relaxed">{items}</p>
               </motion.div>
 
-              {/* Rating Slider */}
+              {/* Star Rating */}
               <motion.div
                 initial={{ opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -821,20 +821,15 @@ export default function StudentDashboard() {
                 className="space-y-3"
               >
                 <Label className="text-xs text-muted-foreground font-medium">{t.student.rateExperience}</Label>
-                <div className="flex items-center gap-4">
-                  <Slider
-                    value={[(review?.rating || 0) === 0 ? 3 : review!.rating]}
-                    onValueChange={(val: number[]) => {
+                <div className="flex items-center gap-3">
+                  <StarRating
+                    value={(review?.rating || 0) === 0 ? 0 : review!.rating}
+                    onChange={(val) => {
                       hapticLight()
-                      setRating(mealType, val[0])
+                      setRating(mealType, val)
                     }}
-                    min={1}
-                    max={5}
-                    step={1}
-                    showTooltip
-                    tooltipContent={(value: number) => t.student.ratingLabels[value - 1]}
-                    aria-label="Rate your experience"
-                    className="flex-1"
+                    size={34}
+                    label={(review?.rating || 0) > 0 ? t.student.ratingLabels[review!.rating - 1] : undefined}
                   />
                   <span className="text-4xl min-w-[48px] text-center">
                     {(review?.rating || 0) > 0

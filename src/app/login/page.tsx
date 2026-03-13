@@ -96,7 +96,6 @@ export default function LoginPage() {
           setFieldsLocked(false)
           setForm(prev => ({ ...prev, name: '', email: '' }))
         }
-        console.error('Lookup failed:', res.status)
         return
       }
       const data = await res.json()
@@ -431,18 +430,15 @@ export default function LoginPage() {
       <Turnstile
         ref={turnstileRef}
         onVerify={(token) => {
-          console.log('[Turnstile] Token set')
           setCaptchaType('turnstile')
           setTurnstileToken(token)
           setTurnstileFailed(false)
         }}
         onExpire={() => setTurnstileToken(null)}
-        onError={(code) => {
-          console.error('[Turnstile] Error:', code)
+        onError={() => {
           setTurnstileToken(null)
         }}
         onFatalError={() => {
-          console.error('[Turnstile] All retries exhausted — switching to hCaptcha fallback')
           setTurnstileFailed(true)
           setCaptchaType('hcaptcha')
         }}
@@ -657,15 +653,13 @@ export default function LoginPage() {
                           id="email"
                           type="email"
                           required
-                          value={form.email}
-                          onChange={(e) => { if (!emailLocked) updateForm('email', e.target.value) }}
-                          readOnly={emailLocked}
-                          placeholder="Enter your College Email"
-                          className={`h-11 text-base ${emailLocked ? 'bg-muted cursor-not-allowed' : ''} ${fieldErrors.email ? 'border-destructive focus-visible:ring-destructive' : ''}`}
+                          value={form.registerId.trim().length > 0 ? `${form.registerId.toLowerCase()}@kanchiuniv.ac.in` : form.email}
+                          readOnly={true}
+                          className={`h-11 text-base bg-muted cursor-not-allowed ${fieldErrors.email ? 'border-destructive focus-visible:ring-destructive' : ''}`}
                         />
-                        {emailLocked && (
-                          <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-1">Email auto-filled from Register ID</p>
-                        )}
+                        <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-1">
+                          OTP will be sent securely to this university email.
+                        </p>
                         {fieldErrors.email && (
                           <p className="text-xs text-destructive mt-1">{fieldErrors.email}</p>
                         )}
@@ -837,13 +831,11 @@ export default function LoginPage() {
                       <HCaptcha
                         ref={hcaptchaRef}
                         onVerify={(token) => {
-                          console.log('[hCaptcha] Token set')
                           setCaptchaType('hcaptcha')
                           setTurnstileToken(token)
                         }}
                         onExpire={() => setTurnstileToken(null)}
-                        onError={(code) => {
-                          console.error('[hCaptcha] Error:', code)
+                        onError={() => {
                           setTurnstileToken(null)
                         }}
                       />

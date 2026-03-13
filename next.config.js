@@ -4,6 +4,13 @@ const isProd = process.env.NODE_ENV === 'production'
 
 const nextConfig = {
     serverExternalPackages: ['exceljs'],
+    // Strip console.log and console.warn from production bundles.
+    // Keeps console.error for server-side debugging in logs.
+    compiler: isProd ? {
+        removeConsole: {
+            exclude: ['error'],
+        },
+    } : undefined,
     async headers() {
         /** @type {Array<{key: string, value: string}>} */
         const securityHeaders = [

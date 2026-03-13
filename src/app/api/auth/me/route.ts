@@ -51,8 +51,7 @@ export async function GET(request: Request) {
       }),
       pendingCookies,
     )
-  } catch (error) {
-    console.error('Auth check error:', error)
+  } catch {
     return attachCookies(
       NextResponse.json({ error: 'Internal server error' }, { status: 500 }),
       pendingCookies,

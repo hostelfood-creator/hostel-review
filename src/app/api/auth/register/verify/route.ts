@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { createAuthClient, attachCookies } from '@/lib/supabase/auth-cookies'
 import { createServiceClient } from '@/lib/supabase/service'
+import { checkRateLimit, getClientIp, rateLimitResponse } from '@/lib/rate-limit'
 import crypto from 'crypto'
 
 const verifyRegisterSchema = z.object({
@@ -12,7 +13,7 @@ const verifyRegisterSchema = z.object({
   otp: z.string().trim()
     .length(6, { message: 'OTP must be exactly 6 digits' })
     .regex(/^\d+$/, { message: 'OTP must contain only numbers' }),
-  password: z.string().trim().min(6, { message: 'Password must be at least 6 characters' }),
+  password: z.string().trim().min(8, { message: 'Password must be at least 8 characters' }),
   name: z.string().optional(),
   department: z.string().optional(),
   year: z.string().trim().max(10).optional(),
@@ -20,6 +21,12 @@ const verifyRegisterSchema = z.object({
 })
 
 export async function POST(request: Request) {
+  // Rate limit: 5 OTP verification attempts per 15 minutes per IP
+  // Prevents brute-forcing the 6-digit OTP (1M combinations)
+  const ip = getClientIp(request)
+  const rl = await checkRateLimit(`register-verify:${ip}`, 5, 15 * 60 * 1000)
+  if (!rl.allowed) return rateLimitResponse(rl.resetAt)
+
   try {
     const json = await request.json()
     const result = verifyRegisterSchema.safeParse(json)
@@ -30,6 +37,11 @@ export async function POST(request: Request) {
     }
 
     const { registerId, otp, password, name, department, year, hostelBlock } = result.data
+
+    // Per-account rate limit: 5 attempts per 15 minutes per register ID
+    // Prevents targeted brute-force even if attacker rotates IPs
+    const accountRl = await checkRateLimit(`register-verify:${registerId}`, 5, 15 * 60 * 1000)
+    if (!accountRl.allowed) return rateLimitResponse(accountRl.resetAt)
 
     const adminClient = createServiceClient()
 
@@ -45,18 +57,20 @@ export async function POST(request: Request) {
     }
 
     if (new Date(record.expires_at) < new Date()) {
-      return NextResponse.json({ error: 'OTP has expired' }, { status: 400 })
+      // Clean up expired OTP
+      await adminClient.from('password_resets').delete().eq('register_id', registerId)
+      return NextResponse.json({ error: 'OTP has expired. Please request a new one.' }, { status: 400 })
     }
 
     const inputHash = crypto.createHash('sha256').update(otp).digest('hex')
-    if (record.otp !== inputHash) {
+    if (!crypto.timingSafeEqual(Buffer.from(record.otp, 'hex'), Buffer.from(inputHash, 'hex'))) {
       return NextResponse.json({ error: 'Invalid OTP' }, { status: 400 })
     }
 
-    // 2. Clear OTP
+    // 2. Clear OTP (prevent replay attacks)
     await adminClient.from('password_resets').delete().eq('register_id', registerId)
 
-    // 3. User Creation (similar to old register/route.ts)
+    // 3. User Creation
     const { supabase, pendingCookies } = await createAuthClient()
     const authEmail = record.email
 
@@ -69,11 +83,11 @@ export async function POST(request: Request) {
       if (authError.message.toLowerCase().includes('already registered')) {
         return NextResponse.json({ error: 'User is already registered. Please sign in.' }, { status: 409 })
       }
-      return NextResponse.json({ error: authError.message }, { status: 400 })
+      return NextResponse.json({ error: 'Registration failed. Please try again.' }, { status: 400 })
     }
 
     if (!authData.user) {
-      return NextResponse.json({ error: 'Failed to create user' }, { status: 500 })
+      return NextResponse.json({ error: 'Registration failed. Please try again.' }, { status: 500 })
     }
 
     // Auto confirm
@@ -110,8 +124,7 @@ export async function POST(request: Request) {
 
     attachCookies(response, pendingCookies)
     return response
-  } catch (error) {
-    console.error('Register Verify error:', error)
+  } catch {
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

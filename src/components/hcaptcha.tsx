@@ -146,15 +146,12 @@ export const HCaptcha = forwardRef<HCaptchaRef, HCaptchaProps>(
           sitekey: siteKey,
           size: 'compact',
           callback: (token: string) => {
-            console.log('[hCaptcha] Token received successfully')
             onVerifyRef.current(token)
           },
           'expired-callback': () => {
-            console.warn('[hCaptcha] Token expired')
             onExpireRef.current?.()
           },
           'error-callback': (errorCode: string) => {
-            console.error('[hCaptcha] Widget error:', errorCode)
             onErrorRef.current?.(errorCode)
           },
         })

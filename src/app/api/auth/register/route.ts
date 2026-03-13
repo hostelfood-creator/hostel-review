@@ -53,7 +53,6 @@ export async function POST(request: Request) {
     const { 
       registerId: cleanId, 
       name: cleanName, 
-      email: cleanEmail, 
       password: cleanPass,
       hostelBlock,
       department,
@@ -61,6 +60,11 @@ export async function POST(request: Request) {
       turnstileToken,
       captchaType 
     } = parseResult.data
+
+    // ── Hardcode Email to Register ID for Security ──
+    // Prevent attackers from hijacking accounts by providing their own email.
+    // The OTP will ONLY be sent to the official university email tied to this Register ID.
+    const cleanEmail = `${cleanId.toLowerCase()}@kanchiuniv.ac.in`
 
     const resolvedCaptchaType: CaptchaType = captchaType === 'hcaptcha' ? 'hcaptcha' : 'turnstile'
 
@@ -92,6 +96,16 @@ export async function POST(request: Request) {
     // Duplicate email check — only one account per email address
     // Use shared service client (consistent with rest of codebase)
     const adminClient = createServiceClient()
+    
+    // ── Maintenance Mode Check ──
+    const { data: maintSettings } = await adminClient.from('site_settings').select('maintenance_mode').eq('id', 1).single()
+    if (maintSettings?.maintenance_mode) {
+      return NextResponse.json(
+        { error: 'System is currently under maintenance. New registrations are temporarily disabled.' },
+        { status: 503 }
+      )
+    }
+
     const { data: existingEmail } = await adminClient
       .from('profiles')
       .select('id')
@@ -123,16 +137,19 @@ export async function POST(request: Request) {
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString() // 10 minutes
     const otpHash = crypto.createHash('sha256').update(otp).digest('hex')
 
-    // Upsert into password_resets to prevent duplicate register_id errors
-    const { error: otpError } = await adminClient.from('password_resets').upsert({
+    // Invalidate any existing OTPs for this register ID first, then insert fresh
+    // This avoids reliance on the UNIQUE constraint for upsert conflict resolution
+    // and prevents overwriting records if schema constraints change.
+    await adminClient.from('password_resets').delete().eq('register_id', cleanId)
+
+    const { error: otpError } = await adminClient.from('password_resets').insert({
       register_id: cleanId,
       email: cleanEmail,
       otp: otpHash,
       expires_at: expiresAt
-    }, { onConflict: 'register_id' })
+    })
 
     if (otpError) {
-      console.error('Failed to generate OTP:', otpError)
       return NextResponse.json({ error: 'Failed to initiate registration' }, { status: 500 })
     }
 
@@ -149,8 +166,7 @@ export async function POST(request: Request) {
     })
 
     return NextResponse.json({ requiresOtp: true, message: 'OTP sent to email.' })
-  } catch (error) {
-    console.error('Register error:', error)
+  } catch {
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

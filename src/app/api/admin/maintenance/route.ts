@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
 import { createServiceClient } from '@/lib/supabase/service'
 import { checkRateLimit, getClientIp, rateLimitResponse } from '@/lib/rate-limit'
 import { logAdminAction } from '@/lib/audit'
+import { createClient } from '@/lib/supabase/server'
 
 export async function GET(request: Request) {
     try {
@@ -11,25 +11,7 @@ export async function GET(request: Request) {
         const rl = await checkRateLimit(`maintenance-get:${ip}`, 30, 60 * 1000)
         if (!rl.allowed) return rateLimitResponse(rl.resetAt)
 
-        const supabase = await createClient()
-
-        // Use Supabase session auth — not a custom cookie
-        const { data: { user } } = await supabase.auth.getUser()
-        if (!user) {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-        }
-
-        const { data: profile } = await supabase
-            .from('profiles')
-            .select('role')
-            .eq('id', user.id)
-            .single()
-
-        const role = profile?.role
-        if (role !== 'super_admin' && role !== 'admin') {
-            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-        }
-
+        // Middleware already authenticates the user; no need for getUser() here.
         // Use service client to bypass RLS for site_settings reads
         const serviceClient = createServiceClient()
         const { data, error } = await serviceClient
@@ -43,13 +25,11 @@ export async function GET(request: Request) {
             if (error.code === 'PGRST116') {
                 return NextResponse.json({ maintenance_mode: false })
             }
-            console.error('Failed to read maintenance status:', error)
             return NextResponse.json({ error: 'Failed to read maintenance status' }, { status: 500 })
         }
 
         return NextResponse.json({ maintenance_mode: data?.maintenance_mode ?? false })
-    } catch (err) {
-        console.error('Maintenance GET Error:', err)
+    } catch {
         return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
     }
 }

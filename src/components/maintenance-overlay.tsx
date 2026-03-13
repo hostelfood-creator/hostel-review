@@ -2,41 +2,38 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { usePathname } from 'next/navigation'
-import { createClient } from '@/lib/supabase/client'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { faScrewdriverWrench } from '@fortawesome/free-solid-svg-icons'
 
-export default function MaintenanceOverlay() {
+export default function MaintenanceOverlay({ forceShow = false }: { forceShow?: boolean }) {
     const pathname = usePathname()
     const [isMaintenance, setIsMaintenance] = useState(false)
     const [loading, setLoading] = useState(true)
-    // Use a ref so the Realtime callback always reads the latest value (avoids stale closure)
     const isSuperAdminRef = useRef(false)
 
     useEffect(() => {
-        const supabase = createClient()
+        let pollTimer: ReturnType<typeof setInterval> | null = null
 
         const checkStatus = async () => {
             try {
-                // Determine if this user is a super admin
-                const userRes = await fetch('/api/auth/me')
+                // Fetch user role and maintenance status in parallel
+                const [userRes, maintRes] = await Promise.all([
+                    fetch('/api/auth/me'),
+                    fetch('/api/admin/maintenance'),
+                ])
+
                 const userData = await userRes.json()
                 const role = userData?.user?.role || 'student'
                 isSuperAdminRef.current = role === 'super_admin' || role === 'admin'
 
-                // Fetch initial maintenance status from the DB
-                // Use maybeSingle() to avoid 406 when RLS blocks the query
-                const { data } = await supabase
-                    .from('site_settings')
-                    .select('maintenance_mode')
-                    .eq('id', 1)
-                    .maybeSingle()
-
-                if (data?.maintenance_mode && !isSuperAdminRef.current) {
-                    setIsMaintenance(true)
+                if (maintRes.ok) {
+                    const maintData = await maintRes.json()
+                    if (maintData?.maintenance_mode && !isSuperAdminRef.current) {
+                        setIsMaintenance(true)
+                    }
                 }
-            } catch (err) {
-                console.error('Failed to check maintenance mode:', err)
+            } catch {
+                // Fail open — if the check fails, don't block access
             } finally {
                 setLoading(false)
             }
@@ -44,24 +41,34 @@ export default function MaintenanceOverlay() {
 
         checkStatus()
 
-        // Use ref in the callback so it always reads the up-to-date admin status
-        const channel = supabase.channel('site_settings_overlay')
-            .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'site_settings', filter: 'id=eq.1' }, (payload) => {
-                const isOn = payload.new.maintenance_mode === true
-                // Only non-admins get locked out
-                if (!isSuperAdminRef.current) {
-                    setIsMaintenance(isOn)
+        // Poll every 30s for maintenance status changes.
+        // Supabase Realtime on site_settings is blocked by RLS for students,
+        // so we poll the API route (which uses service role) instead.
+        pollTimer = setInterval(async () => {
+            try {
+                const res = await fetch('/api/admin/maintenance')
+                if (res.ok) {
+                    const data = await res.json()
+                    if (!isSuperAdminRef.current) {
+                        setIsMaintenance(data?.maintenance_mode === true)
+                    }
                 }
-            })
-            .subscribe()
+            } catch {
+                // Fail open
+            }
+        }, 30_000)
 
         return () => {
-            supabase.removeChannel(channel)
+            if (pollTimer) clearInterval(pollTimer)
         }
-    }, [])  // Run once on mount — ref keeps the value current without re-subscribing
+    }, [])
+
+    const finalIsMaintenance = forceShow || isMaintenance
 
     // Never block the login page — admins must be able to sign in to turn maintenance off
-    if (loading || !isMaintenance || pathname === '/login') return null
+    if (pathname === '/login') return null
+    if (!finalIsMaintenance) return null
+    if (!forceShow && loading) return null
 
     return (
         <div className="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-background/95 backdrop-blur-md">

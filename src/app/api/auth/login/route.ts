@@ -97,7 +97,6 @@ export async function POST(request: Request) {
     })
 
     if (authError || !authData.user) {
-      console.error('[Login] signInWithPassword failed:', authError?.message, authError?.status)
       return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 })
     }
 
@@ -116,10 +115,8 @@ export async function POST(request: Request) {
           adminClient.auth.admin.updateUserById(userId, {
             email: profileLookup.email,
             email_confirm: true,
-          }).then(() => {
-            console.log('[Login] Migrated auth email from @hostel.local for user', userId)
-          }).catch((err) => {
-            console.error('[Login] Post-login email migration failed (non-fatal) for user', userId, err)
+          }).catch(() => {
+            // Non-fatal — email migration can be retried on next login
           })
         )
       }
@@ -170,8 +167,7 @@ export async function POST(request: Request) {
     attachCookies(response, pendingCookies, !extendSession)
 
     return response
-  } catch (error) {
-    console.error('Login error:', error)
+  } catch {
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

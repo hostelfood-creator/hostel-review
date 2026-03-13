@@ -69,8 +69,15 @@ export function attachCookies(
   pending: CookieEntry[],
   sessionOnly = false,
 ): NextResponse {
+  const isProd = process.env.NODE_ENV === 'production'
   for (const { name, value, options } of pending) {
-    const opts = { ...options, httpOnly: true }
+    const opts = {
+      ...options,
+      httpOnly: true,
+      secure: isProd,
+      sameSite: 'lax' as const,
+      path: '/',
+    }
     if (sessionOnly) {
       delete opts.maxAge
       delete opts.expires

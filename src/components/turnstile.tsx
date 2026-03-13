@@ -193,14 +193,12 @@ export const Turnstile = forwardRef<TurnstileRef, TurnstileProps>(
         widgetIdRef.current = window.turnstile.render(containerRef.current, {
           sitekey: siteKey,
           callback: (token: string) => {
-            console.log('[Turnstile] Token received successfully')
             tokenReceivedRef.current = true
             if (verifyTimerRef.current) clearTimeout(verifyTimerRef.current)
             retryCountRef.current = 0
             onVerifyRef.current(token)
           },
           'expired-callback': () => {
-            console.warn('[Turnstile] Token expired — auto-resetting')
             onExpireRef.current?.()
             // Auto-reset on expiry to get a new token
             if (widgetIdRef.current && window.turnstile) {
@@ -208,12 +206,10 @@ export const Turnstile = forwardRef<TurnstileRef, TurnstileProps>(
             }
           },
           'error-callback': (errorCode: string) => {
-            console.error('[Turnstile] Widget error:', errorCode)
             onErrorRef.current?.(errorCode)
 
             retryCountRef.current += 1
             if (retryCountRef.current >= MAX_RETRIES) {
-              console.error('[Turnstile] Max retries exhausted')
               if (!fatalFiredRef.current) {
                 fatalFiredRef.current = true
                 onFatalErrorRef.current?.()
@@ -223,7 +219,6 @@ export const Turnstile = forwardRef<TurnstileRef, TurnstileProps>(
 
             // Auto-retry after increasing delay
             const delay = RETRY_BASE_DELAY_MS * retryCountRef.current
-            console.log(`[Turnstile] Retrying in ${delay}ms (attempt ${retryCountRef.current}/${MAX_RETRIES})`)
             retryTimerRef.current = setTimeout(() => {
               if (mountedRef.current) renderWidget()
             }, delay)

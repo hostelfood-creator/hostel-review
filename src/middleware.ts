@@ -140,8 +140,16 @@ export async function middleware(request: NextRequest) {
         supabaseResponse = NextResponse.next({
           request: { headers: updatedHeaders },
         })
+        // Enforce httpOnly + secure + sameSite on ALL auth cookies to prevent
+        // token theft via XSS or DevTools JavaScript console.
         cookiesToSet.forEach(({ name, value, options }) =>
-          supabaseResponse.cookies.set(name, value, options)
+          supabaseResponse.cookies.set(name, value, {
+            ...options,
+            httpOnly: true,
+            secure: isProd,
+            sameSite: 'lax' as const,
+            path: options?.path || '/',
+          })
         )
       },
     },
@@ -217,8 +225,11 @@ export async function middleware(request: NextRequest) {
   }
 
   // Role-based access control — allow-list approach (fail-closed)
+  // Exception: /api/admin/maintenance GET is readable by all authenticated users
+  // (needed for the maintenance overlay to know if the system is under maintenance)
   const adminRoles = ['admin', 'super_admin']
-  if ((path.startsWith('/admin') || path.startsWith('/api/admin')) && !adminRoles.includes(profile.role)) {
+  const isMaintenanceRead = path === '/api/admin/maintenance' && method === 'GET'
+  if ((path.startsWith('/admin') || path.startsWith('/api/admin')) && !adminRoles.includes(profile.role) && !isMaintenanceRead) {
     if (path.startsWith('/api/')) {
       return withCookies(NextResponse.json({ error: 'Forbidden — admin access required' }, { status: 403 }))
     }
@@ -226,6 +237,48 @@ export async function middleware(request: NextRequest) {
   }
   if (path.startsWith('/student') && profile.role !== 'student') {
     return withCookies(NextResponse.redirect(new URL('/admin', request.url)))
+  }
+
+  // ── Maintenance mode — server-side enforcement for students ────────────
+  // Blocks student page/API access when maintenance mode is enabled.
+  // Admins/super_admins are always exempt. Auth endpoints are exempt so
+  // students can still log out.
+  // Uses direct PostgREST fetch with service role key (Edge-compatible)
+  // because the anon-key Supabase client is blocked by RLS on site_settings.
+  // Cached for 30s via Next.js fetch cache to avoid per-request latency.
+  if (profile.role === 'student' && !path.startsWith('/api/auth/')) {
+    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+    if (serviceKey) {
+      try {
+        const res = await fetch(
+          `${supabaseUrl}/rest/v1/site_settings?id=eq.1&select=maintenance_mode`,
+          {
+            headers: {
+              apikey: serviceKey,
+              Authorization: `Bearer ${serviceKey}`,
+            },
+            next: { revalidate: 30 },
+            signal: AbortSignal.timeout(3000),
+          }
+        )
+        if (res.ok) {
+          const rows = await res.json()
+          if (rows?.[0]?.maintenance_mode) {
+            if (path.startsWith('/api/')) {
+              return withCookies(
+                NextResponse.json({ error: 'System under maintenance. Please try again later.' }, { status: 503 })
+              )
+            }
+            // For page requests, set a header so the client overlay activates instantly
+            supabaseResponse.headers.set('x-maintenance', '1')
+            // Also inject it into the request headers so Server Components (like layout.tsx) can read it
+            supabaseResponse.headers.set('x-middleware-request-x-maintenance', '1')
+          }
+        }
+      } catch {
+        // Non-fatal — if the check fails or times out, allow the request through
+      }
+    }
   }
 
   return withSecurityHeaders(supabaseResponse)

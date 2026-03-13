@@ -25,3 +25,12 @@ logs/
 # OS files
 .DS_Store
 Thumbs.db
+
+# Extraneous files and folders
+skills/
+claude-supercode-skills-main/
+*.md
+!README.md
+*.sh
+*.py
+

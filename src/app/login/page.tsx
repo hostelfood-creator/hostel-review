@@ -476,7 +476,7 @@ export default function LoginPage() {
               Hostel Food Review
             </h1>
             <p className="text-muted-foreground text-lg font-medium tracking-wide relative z-10">
-              Campus Dining, <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary to-blue-500 font-bold drop-shadow-sm">Elevated</span>
+              Food Quality Platform
             </p>
           </div>
         </BlurFade>
@@ -858,7 +858,7 @@ export default function LoginPage() {
                     variant="default"
                     onClick={isForgotPassword ? (otpStep ? handleVerifyOTP : handleRequestOTP) : undefined}
                     disabled={loading}
-                      className="w-full mt-4 h-12 text-base font-bold bg-gradient-to-r from-primary to-blue-600 dark:from-primary dark:to-blue-600 text-white hover:from-primary/90 hover:to-blue-600/90 shadow-[0_0_20px_rgba(var(--primary),0.3)] hover:shadow-[0_0_25px_rgba(var(--primary),0.5)] transition-all duration-300 disabled:opacity-70 rounded-xl"
+                      className="w-full mt-2 h-11 text-base font-semibold bg-black text-white hover:bg-neutral-800 dark:bg-white dark:text-black dark:hover:bg-neutral-200 disabled:opacity-70"
                   >
                     {loading ? (
                       <span className="flex items-center gap-2">

@@ -460,17 +460,15 @@ export default function LoginPage() {
           <div className="text-center mb-10 relative mt-8 lg:mt-0">
             <div className="absolute inset-x-0 top-0 bg-primary/20 blur-[80px] w-full h-full rounded-full z-0 pointer-events-none animate-pulse" />
             <div className="relative z-10 flex justify-center mb-6">
-              <div className="p-4 bg-white/10 dark:bg-black/20 rounded-[2rem] backdrop-blur-xl border border-white/20 dark:border-white/5 shadow-2xl ring-1 ring-black/5">
-                <Image
-                  src="/scsvmv-logo.png"
-                  alt="SCSVMV University"
-                  width={85}
-                  height={85}
-                  className="select-none pointer-events-none hover:scale-105 transition-transform duration-500 hover:rotate-3 drop-shadow-md"
-                  draggable={false}
-                  priority
-                />
-              </div>
+              <Image
+                src="/scsvmv-logo.png"
+                alt="SCSVMV University"
+                width={85}
+                height={85}
+                className="select-none pointer-events-none hover:scale-105 transition-transform duration-500 hover:rotate-3 drop-shadow-md"
+                draggable={false}
+                priority
+              />
             </div>
             <h1 className="text-4xl sm:text-5xl font-extrabold text-transparent bg-clip-text bg-gradient-to-br from-foreground to-foreground/70 tracking-tight drop-shadow-sm mb-3 relative z-10 transition-transform hover:scale-[1.02] duration-500">
               Hostel Food Review

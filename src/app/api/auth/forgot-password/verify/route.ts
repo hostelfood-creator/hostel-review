@@ -2,6 +2,20 @@ import { NextResponse } from 'next/server'
 import crypto from 'crypto'
 import { checkRateLimit, getClientIp, rateLimitResponse } from '@/lib/rate-limit'
 import { createServiceClient } from '@/lib/supabase/service'
+import { z } from 'zod'
+
+const resetVerifySchema = z.object({
+  email: z.string().trim().toLowerCase().optional(),
+  registerId: z.string().trim().toUpperCase().optional(),
+  otp: z.string({ required_error: 'OTP is required' })
+    .regex(/^\d{4,6}$/, 'Invalid verification code format'),
+  newPassword: z.string({ required_error: 'New password is required' })
+    .min(8, 'Password must be at least 8 characters')
+    .max(128, 'Password must be at most 128 characters')
+}).refine(data => data.email || data.registerId, {
+  message: 'Email or Register ID is required',
+  path: ['email']
+})
 
 export async function POST(request: Request) {
     // Rate limit: 5 OTP verify attempts per 15 minutes per IP (Redis-backed in production)
@@ -12,37 +26,21 @@ export async function POST(request: Request) {
     // Per-account rate limit — 5 attempts per 15 min per account identifier (checked before OTP query)
 
     try {
-        const { registerId: rawRegId, email: rawEmail, otp, newPassword } = await request.json()
-
-        // Support both email-based (new) and registerId-based (legacy) lookup
-        const isEmailLookup = !!rawEmail
-        const lookupEmail = rawEmail ? String(rawEmail).trim().toLowerCase() : null
-        const lookupRegId = rawRegId ? String(rawRegId).trim().toUpperCase() : null
-
-        if (!lookupEmail && !lookupRegId) {
-            return NextResponse.json({ error: 'Email or Register ID is required' }, { status: 400 })
+        const body = await request.json()
+        const parseResult = resetVerifySchema.safeParse(body)
+        if (!parseResult.success) {
+            const error = parseResult.error.errors[0]?.message || 'Invalid input'
+            return NextResponse.json({ error }, { status: 400 })
         }
+
+        const { registerId: lookupRegId, email: lookupEmail, otp, newPassword } = parseResult.data
+        const isEmailLookup = !!lookupEmail
 
         // Per-account rate limit BEFORE OTP lookup — prevents brute-force even with wrong OTPs
         // Key must match the same identifier used in the DB query (email if present, else registerId)
         const acctIdentifier = isEmailLookup ? lookupEmail : lookupRegId
         const acctRl = await checkRateLimit(`otp-verify-acct:${acctIdentifier}`, 5, 15 * 60 * 1000)
         if (!acctRl.allowed) return rateLimitResponse(acctRl.resetAt)
-        if (!otp || !newPassword) {
-            return NextResponse.json({ error: 'OTP and new password are required' }, { status: 400 })
-        }
-
-        // Strict type and length validation to prevent tampering (supports 6-digit OTP)
-        if (typeof otp !== 'string' || !/^\d{4,6}$/.test(otp)) {
-            return NextResponse.json({ error: 'Invalid verification code format' }, { status: 400 })
-        }
-
-        if (newPassword.length < 8) {
-            return NextResponse.json({ error: 'Password must be at least 8 characters' }, { status: 400 })
-        }
-        if (newPassword.length > 128) {
-            return NextResponse.json({ error: 'Password must be at most 128 characters' }, { status: 400 })
-        }
 
         // 1. Create service-role client — bypasses RLS to update password directly
         //    The service role key is REQUIRED — anon key CANNOT call auth.admin methods

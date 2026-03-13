@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { faMessage, faStar, faUsers, faBell, faTriangleExclamation, faScrewdriverWrench, faUtensils, faQrcode, faFileUpload, faPrint, faBullhorn, faTrash } from '@fortawesome/free-solid-svg-icons'
+import { faMessage, faStar, faUsers, faBell, faTriangleExclamation, faScrewdriverWrench, faUtensils, faQrcode, faFileUpload, faPrint, faBullhorn, faTrash, faClockRotateLeft, faArrowRight } from '@fortawesome/free-solid-svg-icons'
 import dynamic from 'next/dynamic'
 import type { ChartsRowProps, SentimentChartProps, HeatmapProps, WeekOverWeekProps } from '@/components/admin-charts'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -127,6 +127,9 @@ export default function AdminDashboard() {
   const [announcementPriority, setAnnouncementPriority] = useState('normal')
   const [announcementTarget, setAnnouncementTarget] = useState('all')
   const [announcementSending, setAnnouncementSending] = useState(false)
+  // Admin actions state (super admin only)
+  const [adminActions, setAdminActions] = useState<{ id: string; actor_email: string | null; actor_role: string; action: string; target_id: string | null; details: Record<string, unknown>; created_at: string }[]>([])
+  const [adminActionsLoading, setAdminActionsLoading] = useState(true)
 
   const loadData = useCallback(async () => {
     setLoading(true)
@@ -172,6 +175,22 @@ export default function AdminDashboard() {
         setAnnouncementsList(annJson.announcements || [])
       } catch {
         console.error('Failed to load announcements')
+      }
+
+      // Fetch recent admin actions (super admin only)
+      if (json.userRole === 'super_admin') {
+        setAdminActionsLoading(true)
+        try {
+          const actionsRes = await fetch('/api/admin/audit-logs?pageSize=10')
+          if (actionsRes.ok) {
+            const actionsJson = await actionsRes.json()
+            setAdminActions(actionsJson.logs || [])
+          }
+        } catch {
+          console.error('Failed to load admin actions')
+        } finally {
+          setAdminActionsLoading(false)
+        }
       }
     } catch (err) {
       console.error('Failed to load analytics:', err)
@@ -668,6 +687,17 @@ export default function AdminDashboard() {
                 </div>
                 <span className="text-xl font-bold text-primary">{attendance.total}</span>
               </div>
+              {data.userRole === 'super_admin' && (
+                <div className="mt-3 text-center">
+                  <a
+                    href="/admin/blocks/control"
+                    className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline font-medium"
+                  >
+                    Edit Check-in Counts
+                    <FontAwesomeIcon icon={faArrowRight} className="w-3 h-3" />
+                  </a>
+                </div>
+              )}
             </>
           )}
         </CardContent>
@@ -884,6 +914,88 @@ export default function AdminDashboard() {
           <SentimentChart sentimentData={sentimentData} />
         </CardContent>
       </Card>
+
+      {/* Admin Activity Feed — Super Admin only */}
+      {data.userRole === 'super_admin' && (
+        <Card className="rounded-xl mt-6">
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                <FontAwesomeIcon icon={faClockRotateLeft} className="w-4 h-4 text-primary" />
+                Recent Admin Actions
+              </CardTitle>
+              <a href="/admin/audit" className="text-xs text-primary hover:underline flex items-center gap-1 print-hide">
+                View All <FontAwesomeIcon icon={faArrowRight} className="w-3 h-3" />
+              </a>
+            </div>
+          </CardHeader>
+          <CardContent className="p-0">
+            {adminActionsLoading ? (
+              <div className="p-4 space-y-2">
+                {[1, 2, 3].map((i) => (
+                  <Skeleton key={i} className="h-12 rounded-lg" />
+                ))}
+              </div>
+            ) : adminActions.length === 0 ? (
+              <div className="py-6 text-center text-sm text-muted-foreground">
+                No admin actions recorded yet.
+              </div>
+            ) : (
+              <div className="divide-y max-h-[400px] overflow-y-auto">
+                {adminActions.map((action) => {
+                  const actionLabel = {
+                    user_deactivate: 'User Deactivated',
+                    user_reactivate: 'User Reactivated',
+                    user_promote_admin: 'Promoted to Admin',
+                    user_demote_student: 'Demoted to Student',
+                    menu_upsert: 'Menu Updated',
+                    menu_copy_all: 'Menu Copied',
+                    complaint_update: 'Complaint Updated',
+                    review_reply: 'Review Replied',
+                    announcement_create: 'Announcement Created',
+                    announcement_delete: 'Announcement Deleted',
+                    maintenance_toggle: 'Maintenance Toggled',
+                    meal_timings_update: 'Meal Timings Updated',
+                    checkin_count_override: 'Check-in Count Edited',
+                    super_add_block: 'Block Added',
+                    super_remove_block: 'Block Removed',
+                    super_add_admin: 'Admin Created',
+                    super_remove_admin: 'Admin Removed',
+                  }[action.action] || action.action.replace(/_/g, ' ')
+                  const details = action.details || {}
+                  const blockInfo = (details.hostelBlock as string) || (details.hostel_block as string) || null
+
+                  const diff = Math.floor((Date.now() - new Date(action.created_at).getTime()) / 1000)
+                  const ago = diff < 60 ? 'just now' : diff < 3600 ? `${Math.floor(diff / 60)}m ago` : diff < 86400 ? `${Math.floor(diff / 3600)}h ago` : `${Math.floor(diff / 86400)}d ago`
+
+                  return (
+                    <div key={action.id} className="px-4 py-3 hover:bg-muted/30 transition-colors">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2 flex-wrap min-w-0">
+                          <span className="text-sm font-medium text-foreground">{actionLabel}</span>
+                          <Badge
+                            variant={action.actor_role === 'super_admin' ? 'default' : 'secondary'}
+                            className="text-[9px]"
+                          >
+                            {action.actor_role === 'super_admin' ? 'Super' : 'Admin'}
+                          </Badge>
+                          {blockInfo && (
+                            <Badge variant="outline" className="text-[9px]">{blockInfo}</Badge>
+                          )}
+                        </div>
+                        <span className="text-[10px] text-muted-foreground whitespace-nowrap">{ago}</span>
+                      </div>
+                      {action.actor_email && (
+                        <p className="text-[11px] text-muted-foreground mt-0.5">{action.actor_email}</p>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
     </div>
   )
 }

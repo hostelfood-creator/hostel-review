@@ -7,7 +7,7 @@ import { ThemeToggle } from '@/lib/theme'
 import { useTranslation } from '@/lib/i18n'
 import { LanguageSwitcher } from '@/components/language-switcher'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { faUtensils, faChartLine, faMessage, faBars, faRightFromBracket, faCommentDots, faQrcode, faClipboardList, faFileLines, faUsers, faShieldHalved } from '@fortawesome/free-solid-svg-icons'
+import { faUtensils, faChartLine, faMessage, faBars, faRightFromBracket, faCommentDots, faQrcode, faClipboardList, faFileLines, faUsers, faShieldHalved, faSlidersH } from '@fortawesome/free-solid-svg-icons'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
@@ -79,6 +79,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       href: '/admin/blocks',
       icon: <FontAwesomeIcon icon={faBars} className="w-5 h-5" />,
       label: t.nav.blocks,
+    })
+    navItems.push({
+      href: '/admin/blocks/control',
+      icon: <FontAwesomeIcon icon={faSlidersH} className="w-5 h-5" />,
+      label: 'Block Control',
     })
     navItems.push({
       href: '/admin/audit',

@@ -3,6 +3,20 @@ import { checkRateLimit, getClientIp, rateLimitResponse } from '@/lib/rate-limit
 import { createServiceClient } from '@/lib/supabase/service'
 import { createAuthClient, attachCookies } from '@/lib/supabase/auth-cookies'
 import { verifyTurnstileToken, verifyCaptchaToken, type CaptchaType } from '@/lib/turnstile'
+import { z } from 'zod'
+
+const loginSchema = z.object({
+  registerId: z.string({ required_error: 'Register ID is required' })
+    .min(1, 'Register ID is required')
+    .max(30, 'Register ID is too long')
+    .transform(val => val.trim().toUpperCase()),
+  password: z.string({ required_error: 'Password is required' })
+    .min(1, 'Password is required')
+    .max(128, 'Password is too long'),
+  rememberMe: z.boolean().optional().default(false),
+  turnstileToken: z.string().optional(),
+  captchaType: z.enum(['turnstile', 'hcaptcha']).optional()
+})
 
 export async function POST(request: Request) {
   // Rate limit: 10 attempts per 15 minutes per IP (Redis-backed in production)
@@ -12,20 +26,23 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json()
-    const { registerId, password, rememberMe, turnstileToken, captchaType } = body
-    const extendSession = rememberMe === true
-    const resolvedCaptchaType: CaptchaType = captchaType === 'hcaptcha' ? 'hcaptcha' : 'turnstile'
-
-    if (!registerId || !password) {
-      return NextResponse.json(
-        { error: 'Register ID and password are required' },
-        { status: 400 }
-      )
+    
+    const parseResult = loginSchema.safeParse(body)
+    if (!parseResult.success) {
+      const error = parseResult.error.errors[0]?.message || 'Invalid input'
+      return NextResponse.json({ error }, { status: 400 })
     }
 
-    // Input sanitization: strip whitespace, limit length
-    const cleanId = String(registerId).trim().toUpperCase().slice(0, 30)
-    const cleanPass = String(password).slice(0, 128)
+    const { 
+      registerId: cleanId, 
+      password: cleanPass, 
+      rememberMe, 
+      turnstileToken, 
+      captchaType 
+    } = parseResult.data
+    
+    const extendSession = rememberMe === true
+    const resolvedCaptchaType: CaptchaType = captchaType === 'hcaptcha' ? 'hcaptcha' : 'turnstile'
 
     // ── Phase 1: Independent checks in parallel ──────────────────────
     // Turnstile verification and profile lookup are independent —

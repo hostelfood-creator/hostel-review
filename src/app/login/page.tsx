@@ -26,6 +26,7 @@ export default function LoginPage() {
   const searchParams = useSearchParams()
   const redirectTo = searchParams.get('redirect') || null
   const [isRegister, setIsRegister] = useState(false)
+  const [registerOtpStep, setRegisterOtpStep] = useState(false)
   const [isForgotPassword, setIsForgotPassword] = useState(false)
   const [otpStep, setOtpStep] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -160,14 +161,18 @@ export default function LoginPage() {
     if (form.password && form.password.length < 8) errors.password = 'Password must be at least 8 characters'
 
     if (isRegister) {
-      if (!form.name.trim()) errors.name = 'Full name is required'
-      if (form.name.trim().length > 30) errors.name = 'Name must be 30 characters or less'
-      if (!form.email.trim()) errors.email = 'Email is required'
-      if (form.email && !form.email.toLowerCase().endsWith('@kanchiuniv.ac.in')) {
-        errors.email = 'Only @kanchiuniv.ac.in email addresses are accepted'
+      if (!registerOtpStep) {
+        if (!form.name.trim()) errors.name = 'Full name is required'
+        if (form.name.trim().length > 30) errors.name = 'Name must be 30 characters or less'
+        if (!form.email.trim()) errors.email = 'Email is required'
+        if (form.email && !form.email.toLowerCase().endsWith('@kanchiuniv.ac.in')) {
+          errors.email = 'Only @kanchiuniv.ac.in email addresses are accepted'
+        }
+        if (!form.hostelBlock) errors.hostelBlock = 'Hostel block is required'
+        if (!form.year) errors.year = 'Year is required'
+      } else {
+        if (!form.otp || form.otp.length !== 6) errors.otp = 'Valid 6-digit OTP is required'
       }
-      if (!form.hostelBlock) errors.hostelBlock = 'Hostel block is required'
-      if (!form.year) errors.year = 'Year is required'
     }
 
     setFieldErrors(errors)
@@ -314,10 +319,26 @@ export default function LoginPage() {
     setLoading(true)
 
     try {
-      const endpoint = isRegister ? '/api/auth/register' : '/api/auth/login'
-      const body = isRegister
-        ? { ...form, turnstileToken, captchaType }
-        : { registerId: form.registerId, password: form.password, rememberMe, turnstileToken, captchaType }
+      let endpoint = '/api/auth/login'
+      let body: any = { registerId: form.registerId, password: form.password, rememberMe, turnstileToken, captchaType }
+
+      if (isRegister) {
+        if (!registerOtpStep) {
+          endpoint = '/api/auth/register'
+          body = { ...form, turnstileToken, captchaType }
+        } else {
+          endpoint = '/api/auth/register/verify'
+          body = { 
+            registerId: form.registerId, 
+            otp: form.otp, 
+            password: form.password, 
+            name: form.name, 
+            department: form.department, 
+            year: form.year, 
+            hostelBlock: form.hostelBlock 
+          }
+        }
+      }
 
       const res = await fetch(endpoint, {
         method: 'POST',
@@ -331,6 +352,7 @@ export default function LoginPage() {
         if (isRegister && res.status === 409) {
           toast.error('Account already exists! Switching to Sign In...')
           setIsRegister(false)
+          setRegisterOtpStep(false)
           return
         }
         setError(data.error || 'Something went wrong')
@@ -338,15 +360,22 @@ export default function LoginPage() {
         return
       }
 
-      toast.success('Signed in successfully!')
+      if (isRegister && !registerOtpStep && data.requiresOtp) {
+        toast.success(data.message || 'OTP sent to your email.')
+        setRegisterOtpStep(true)
+        return
+      }
+
+      toast.success(isRegister ? 'Registration successful!' : 'Signed in successfully!')
 
       // If there's a redirect parameter (e.g., from QR code scanning), go there
       if (redirectTo && redirectTo.startsWith('/') && !redirectTo.startsWith('//')) {
         window.location.href = redirectTo
-      } else if (data.user.role === 'student') {
-        window.location.href = '/student'
+      } else if (data.user?.role === 'student' || data.user?.role === 'admin') {
+        window.location.href = data.user.role === 'student' ? '/student' : '/admin'
       } else {
-        window.location.href = '/admin'
+        // Fallback for older formats
+        window.location.href = '/student'
       }
     } catch {
       setError('Network error. Please try again.')
@@ -451,7 +480,7 @@ export default function LoginPage() {
           <Card className="rounded-2xl shadow-sm">
             <CardHeader className="pb-4">
               <CardTitle className="text-xl">
-                {isForgotPassword ? (otpStep ? 'Verify OTP' : 'Reset Password') : isRegister ? 'Create Account' : 'Sign In'}
+                {isForgotPassword ? (otpStep ? 'Verify OTP' : 'Reset Password') : isRegister ? (registerOtpStep ? 'Verify Registration' : 'Create Account') : 'Sign In'}
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -482,7 +511,7 @@ export default function LoginPage() {
                         <p className="text-xs text-destructive mt-1">{fieldErrors.forgotEmail}</p>
                       )}
                     </div>
-                  ) : !isForgotPassword ? (
+                  ) : !isForgotPassword && !registerOtpStep ? (
                     <div className="space-y-1.5">
                       <Label htmlFor="registerId" className="text-sm font-medium text-foreground">
                         Register ID <span className="text-destructive">*</span>
@@ -566,6 +595,21 @@ export default function LoginPage() {
                         </div>
                       </>
                     ) : null
+                  ) : isRegister && registerOtpStep ? (
+                    <div className="space-y-3">
+                      <Label className="text-sm font-medium text-foreground block text-center">
+                        Verification Code <span className="text-destructive">*</span>
+                      </Label>
+                      <OtpInput
+                        value={form.otp}
+                        onChange={(val) => updateForm('otp', val)}
+                        disabled={loading}
+                        error={!!fieldErrors.otp}
+                      />
+                      {fieldErrors.otp && (
+                        <p className="text-xs text-destructive mt-1 text-center">{fieldErrors.otp}</p>
+                      )}
+                    </div>
                   ) : isRegister ? (
                     <>
                       <div className="space-y-1.5">
@@ -698,7 +742,7 @@ export default function LoginPage() {
                     </>
                   ) : null}
 
-                  {!isForgotPassword && (
+                  {!isForgotPassword && !registerOtpStep && (
                     <div className="space-y-1.5">
                       <Label htmlFor="password" className="text-sm font-medium text-foreground">
                         Password <span className="text-destructive">*</span>
@@ -819,9 +863,9 @@ export default function LoginPage() {
                           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                         </svg>
-                        {isForgotPassword ? 'Processing...' : isRegister ? 'Creating Account...' : 'Signing In...'}
+                        {isForgotPassword ? 'Processing...' : isRegister ? (registerOtpStep ? 'Verifying...' : 'Sending code...') : 'Signing In...'}
                       </span>
-                    ) : isForgotPassword ? (otpStep ? 'Reset Password' : 'Send Code') : isRegister ? 'Create Account' : 'Sign In'}
+                    ) : isForgotPassword ? (otpStep ? 'Reset Password' : 'Send Code') : isRegister ? (registerOtpStep ? 'Verify & Create Account' : 'Request OTP') : 'Sign In'}
                   </Button>
                 </fieldset>
               </form>
@@ -846,6 +890,10 @@ export default function LoginPage() {
                     variant="link"
                     disabled={loading}
                     onClick={() => {
+                      if (registerOtpStep) {
+                        setRegisterOtpStep(false)
+                        return
+                      }
                       setIsRegister(!isRegister)
                       setNameLocked(false)
                       setFieldsLocked(false)
@@ -857,7 +905,7 @@ export default function LoginPage() {
                     className="text-muted-foreground hover:text-primary text-sm disabled:opacity-50"
                   >
                     {isRegister
-                      ? 'Already have an account? Sign In'
+                      ? (registerOtpStep ? 'Back to Registration' : 'Already have an account? Sign In')
                       : "Don't have an account? Register"}
                   </Button>
                 )}

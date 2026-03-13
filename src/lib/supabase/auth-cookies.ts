@@ -70,7 +70,7 @@ export function attachCookies(
   sessionOnly = false,
 ): NextResponse {
   for (const { name, value, options } of pending) {
-    const opts = { ...options }
+    const opts = { ...options, httpOnly: true }
     if (sessionOnly) {
       delete opts.maxAge
       delete opts.expires

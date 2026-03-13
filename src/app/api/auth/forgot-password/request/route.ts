@@ -4,6 +4,17 @@ import { checkRateLimit, getClientIp, rateLimitResponse } from '@/lib/rate-limit
 import { getTransporter, getSender } from '@/lib/email'
 import { createServiceClient } from '@/lib/supabase/service'
 import { verifyTurnstileToken, verifyCaptchaToken, type CaptchaType } from '@/lib/turnstile'
+import { z } from 'zod'
+
+const forgotPasswordSchema = z.object({
+  email: z.string().optional(),
+  registerId: z.string().optional(),
+  turnstileToken: z.string().optional(),
+  captchaType: z.enum(['turnstile', 'hcaptcha']).optional()
+}).refine(data => data.email || data.registerId, {
+  message: 'Email address or Register ID is required',
+  path: ['email']
+})
 
 // Fully responsive institutional email — works on Gmail, Outlook, Apple Mail, and mobile
 function buildOtpEmail(name: string, registerId: string, otp: string): string {
@@ -177,7 +188,14 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json()
-    const { turnstileToken, captchaType } = body
+    const parseResult = forgotPasswordSchema.safeParse(body)
+    
+    if (!parseResult.success) {
+      const error = parseResult.error.errors[0]?.message || 'Invalid input'
+      return NextResponse.json({ error }, { status: 400 })
+    }
+
+    const { turnstileToken, captchaType } = parseResult.data
     const resolvedCaptchaType: CaptchaType = captchaType === 'hcaptcha' ? 'hcaptcha' : 'turnstile'
 
     // Verify CAPTCHA bot protection (Turnstile primary, hCaptcha fallback).
@@ -196,10 +214,7 @@ export async function POST(request: Request) {
       }
     }
 
-    const rawId = body.email || body.registerId
-    if (!rawId) {
-      return NextResponse.json({ error: 'Email address is required' }, { status: 400 })
-    }
+    const rawId = parseResult.data.email || parseResult.data.registerId
     // Sanitize input — support both email lookup and legacy registerId lookup
     const isEmail = String(rawId).includes('@')
     const lookupValue = isEmail

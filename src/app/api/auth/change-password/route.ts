@@ -2,6 +2,17 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createServiceClient } from '@/lib/supabase/service'
 import { checkRateLimit, getClientIp, rateLimitResponse } from '@/lib/rate-limit'
+import { z } from 'zod'
+
+const changePasswordSchema = z.object({
+  currentPassword: z.string({ required_error: 'Current password is required' }).min(1, 'Current password is required'),
+  newPassword: z.string({ required_error: 'New password is required' })
+    .min(8, 'New password must be at least 8 characters')
+    .max(128, 'New password must be under 128 characters'),
+}).refine(data => data.currentPassword !== data.newPassword, {
+  message: 'New password must be different from current password',
+  path: ['newPassword']
+})
 
 export async function POST(request: Request) {
   try {
@@ -18,35 +29,13 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json()
-    const { currentPassword, newPassword } = body
-
-    if (!currentPassword || !newPassword) {
-      return NextResponse.json(
-        { error: 'Current password and new password are required' },
-        { status: 400 }
-      )
+    const parseResult = changePasswordSchema.safeParse(body)
+    if (!parseResult.success) {
+      const error = parseResult.error.errors[0]?.message || 'Invalid input'
+      return NextResponse.json({ error }, { status: 400 })
     }
 
-    if (typeof newPassword !== 'string' || newPassword.length < 8) {
-      return NextResponse.json(
-        { error: 'New password must be at least 8 characters' },
-        { status: 400 }
-      )
-    }
-
-    if (newPassword.length > 128) {
-      return NextResponse.json(
-        { error: 'New password must be under 128 characters' },
-        { status: 400 }
-      )
-    }
-
-    if (currentPassword === newPassword) {
-      return NextResponse.json(
-        { error: 'New password must be different from current password' },
-        { status: 400 }
-      )
-    }
+    const { currentPassword, newPassword } = parseResult.data
 
     // Verify current password by attempting to sign in with a throwaway client
     // We use the service client to verify so the SSR session isn't corrupted

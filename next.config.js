@@ -3,6 +3,7 @@
 const isProd = process.env.NODE_ENV === 'production'
 
 const nextConfig = {
+    poweredByHeader: false,
     serverExternalPackages: ['exceljs'],
     // Strip console.log and console.warn from production bundles.
     // Keeps console.error for server-side debugging in logs.

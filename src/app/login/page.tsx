@@ -422,7 +422,12 @@ export default function LoginPage() {
   const passwordStrength = getPasswordStrength(form.password)
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-4 transition-colors relative overflow-hidden">
+    <div className="min-h-screen bg-background flex flex-col md:flex-row items-center justify-center p-4 transition-colors relative overflow-hidden">
+      {/* Ambient background glows */}
+      <div className="absolute top-[10%] -left-[10%] w-[40vw] h-[40vw] bg-primary/30 rounded-full blur-[140px] mix-blend-screen animate-pulse pointer-events-none z-0" />
+      <div className="absolute bottom-[10%] -right-[10%] w-[40vw] h-[40vw] bg-blue-600/20 rounded-full blur-[140px] mix-blend-screen animate-[pulse_6s_ease-in-out_infinite] delay-1000 pointer-events-none z-0" />
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[50vw] h-[50vw] bg-purple-600/15 rounded-full blur-[160px] mix-blend-screen animate-[pulse_8s_ease-in-out_infinite] delay-700 pointer-events-none z-0" />
+      
       {/* Parallax floating particles */}
       <ParticlesBackground />
 
@@ -449,33 +454,39 @@ export default function LoginPage() {
         <ThemeToggle />
       </div>
 
-      <div className="w-full max-w-md lg:max-w-lg relative z-10">
+      <div className="w-full max-w-md lg:max-w-lg relative z-10 flex flex-col items-center">
         {/* Logo / Header */}
         <BlurFade delay={0.1} inView>
-          <div className="text-center mb-10">
-            <Image
-              src="/scsvmv-logo.png"
-              alt="SCSVMV University"
-              width={80}
-              height={80}
-              className="mx-auto mb-5 select-none pointer-events-none"
-              draggable={false}
-              priority
-            />
-            <h1 className="text-3xl font-bold text-foreground tracking-tight">
+          <div className="text-center mb-10 relative mt-8 lg:mt-0">
+            <div className="absolute inset-x-0 top-0 bg-primary/20 blur-[80px] w-full h-full rounded-full z-0 pointer-events-none animate-pulse" />
+            <div className="relative z-10 flex justify-center mb-6">
+              <div className="p-4 bg-white/10 dark:bg-black/20 rounded-[2rem] backdrop-blur-xl border border-white/20 dark:border-white/5 shadow-2xl ring-1 ring-black/5">
+                <Image
+                  src="/scsvmv-logo.png"
+                  alt="SCSVMV University"
+                  width={85}
+                  height={85}
+                  className="select-none pointer-events-none hover:scale-105 transition-transform duration-500 hover:rotate-3 drop-shadow-md"
+                  draggable={false}
+                  priority
+                />
+              </div>
+            </div>
+            <h1 className="text-4xl sm:text-5xl font-extrabold text-transparent bg-clip-text bg-gradient-to-br from-foreground to-foreground/70 tracking-tight drop-shadow-sm mb-3 relative z-10 transition-transform hover:scale-[1.02] duration-500">
               Hostel Food Review
             </h1>
-            <p className="text-muted-foreground text-base mt-2">
-              Food Quality Platform
+            <p className="text-muted-foreground text-lg font-medium tracking-wide relative z-10">
+              Campus Dining, <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary to-blue-500 font-bold drop-shadow-sm">Elevated</span>
             </p>
           </div>
         </BlurFade>
 
         {/* Form Card */}
-        <BlurFade delay={0.25} inView>
-          <Card className="rounded-2xl shadow-sm">
-            <CardHeader className="pb-4">
-              <CardTitle className="text-xl">
+        <BlurFade delay={0.25} inView className="w-full">
+          <Card className="rounded-[2rem] shadow-2xl relative overflow-hidden bg-background/50 backdrop-blur-2xl border-white/10 dark:border-white/10 hover:border-primary/30 transition-all duration-500">
+            <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-transparent to-transparent opacity-50 pointer-events-none" />
+            <CardHeader className="pb-6 relative z-10">
+              <CardTitle className="text-2xl font-bold tracking-tight text-center">
                 {isForgotPassword ? (otpStep ? 'Verify OTP' : 'Reset Password') : isRegister ? (registerOtpStep ? 'Verify Registration' : 'Create Account') : 'Sign In'}
               </CardTitle>
             </CardHeader>
@@ -847,7 +858,7 @@ export default function LoginPage() {
                     variant="default"
                     onClick={isForgotPassword ? (otpStep ? handleVerifyOTP : handleRequestOTP) : undefined}
                     disabled={loading}
-                    className="w-full mt-2 h-11 text-base font-semibold bg-black text-white hover:bg-neutral-800 dark:bg-white dark:text-black dark:hover:bg-neutral-200 disabled:opacity-70"
+                      className="w-full mt-4 h-12 text-base font-bold bg-gradient-to-r from-primary to-blue-600 dark:from-primary dark:to-blue-600 text-white hover:from-primary/90 hover:to-blue-600/90 shadow-[0_0_20px_rgba(var(--primary),0.3)] hover:shadow-[0_0_25px_rgba(var(--primary),0.5)] transition-all duration-300 disabled:opacity-70 rounded-xl"
                   >
                     {loading ? (
                       <span className="flex items-center gap-2">
